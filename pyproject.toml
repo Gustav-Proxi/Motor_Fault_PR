@@ -1,0 +1,22 @@
+[project]
+name = "motorpr"
+version = "0.1.0"
+description = "Bandwidth-limited pattern recognition on smartphone induction-motor vibration (CSE 455/555)"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.13",
+    "pandas>=2.2",
+    "pyarrow>=15",
+    "scikit-learn>=1.5",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+# numpy 2.x + Apple Accelerate emits spurious FP warnings from matmul on macOS
+filterwarnings = ["ignore:.*encountered in matmul:RuntimeWarning"]

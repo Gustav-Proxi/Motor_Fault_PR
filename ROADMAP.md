@@ -39,4 +39,20 @@ The proposal applies DTW to load- and speed-transition segments, but every recor
 
 ## Splitting the work
 
-Items 2 and 4 don't depend on 1 and 3, so one person can take the analysis (2, 4) while the other takes the infrastructure and extensions (1, 3, 5). To be agreed.
+Agreed split, 2026-10-22. The two tracks touch different files, so both can run in parallel on separate branches and merge into `main` through PRs.
+
+### Vaishak — infrastructure and extensions (items 1, 3, 5)
+Branch `vaishak/<topic>`. Owns `scripts/run_baseline.py`, `scripts/run_corruption.py`, `src/motorpr/evaluation.py`, `src/motorpr/projections.py`, and new modules for the OOD splits and Subspace Alignment.
+- [ ] 1. Clean case computed once, parallel corruption levels, 5-seed reruns with mean ± std.
+- [ ] 3. Cross-speed and cross-load splits; Subspace Alignment.
+- [ ] 5. Kernel PCA (RBF); nested hyperparameter tuning.
+
+### Sanika — analysis (items 2, 4)
+Branch `sanika/<topic>`. Owns a new `src/motorpr/analysis.py`, `scripts/run_analysis.py`, `notebooks/`, and `results/analysis/`. Uses the existing feature cache and `evaluation.py` read-only; if something there needs to change, ask Vaishak instead of editing it.
+- [ ] 2. Per-feature, per-class-pair Fisher scores; the R vs B2 sideband check; aliasing vs. low-frequency effects for B3 and V.
+- [ ] 4. Write up DTW options (a) and (b) with a recommendation, and prototype (b) if it is cheap. We decide together.
+
+### Hand-offs
+- Sanika's numbers are single-seed until item 1 lands; rerun them once the multi-seed harness is merged.
+- Item 3's OOD splits will reuse the confusion explanations from item 2, so share findings as they come in.
+- Report sections follow the same split: Vaishak writes methods, validation and robustness; Sanika writes separability analysis and DTW. Each reviews the other's.

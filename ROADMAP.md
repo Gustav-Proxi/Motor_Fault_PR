@@ -39,7 +39,7 @@ The proposal applies DTW to load- and speed-transition segments, but every recor
 
 ## Splitting the work
 
-Agreed split, 2026-10-22. The two tracks touch different files, so both can run in parallel on separate branches and merge into `main` through PRs.
+Agreed split, 2026-10-22; full task list and git workflow in `SPLIT.md`. The two tracks touch different files, so both can run in parallel on separate branches and merge into `main` through PRs.
 
 ### Vaishak — infrastructure and extensions (items 1, 3, 5)
 Branch `vaishak/<topic>`. Owns `scripts/run_baseline.py`, `scripts/run_corruption.py`, `src/motorpr/evaluation.py`, `src/motorpr/projections.py`, and new modules for the OOD splits and Subspace Alignment.

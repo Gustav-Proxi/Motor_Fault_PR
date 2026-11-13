@@ -18,6 +18,7 @@ from sklearn.preprocessing import StandardScaler
 
 from .data import CLASSES, DATA_DIR, FS
 from .evaluation import fisher_criterion, transfer_fisher
+from .features import running_speed
 from .projections import LDA
 
 META_COLS = ["rec_id", "label", "load", "supply_hz", "win_idx"]
@@ -270,3 +271,130 @@ def sideband_alias_overlap(f1: float, f_pole: float, fs: float = FS, kmax: int =
         if ks:
             hits.append(f"{side}={'/'.join(f'{k}x' for k in ks)}")
     return ", ".join(hits)
+
+
+# ---------------------------------------------------------------- 2c: aliasing vs low-frequency effects
+
+# Bearing defect frequencies as multiples of shaft speed. The dataset does not name the
+# bearing; these are the 6204-class factors implied by the proposal's quoted ranges
+# (BPFO ~ 44 Hz and BPFI ~ 72 Hz at 14.5 Hz shaft speed).
+BPFO_ORDER = 3.05
+BPFI_ORDER = 4.95
+
+
+def candidate_sources(f1: float, supply_hz: float, fs: float = FS) -> pd.DataFrame:
+    """Known mechanical / electrical frequencies, where they truly are and where they appear.
+
+    kind: "shaft"   k x f1 (k = 1..8), mechanical harmonics
+          "line"    m x f_supply (m = 1..4); 2x line is the voltage-imbalance signature
+          "bearing" BPFO / BPFI and their 2nd harmonics (assumed factors above)
+    aliased is True when the true frequency is above Nyquist.
+    """
+    rows = [(f"{k}x f1", "shaft", k * f1) for k in range(1, 9)]
+    rows += [(f"{m}x line", "line", m * supply_hz) for m in range(1, 5)]
+    rows += [("BPFO", "bearing", BPFO_ORDER * f1), ("2xBPFO", "bearing", 2 * BPFO_ORDER * f1),
+             ("BPFI", "bearing", BPFI_ORDER * f1), ("2xBPFI", "bearing", 2 * BPFI_ORDER * f1)]
+    d = pd.DataFrame(rows, columns=["source", "kind", "true_hz"])
+    d["apparent_hz"] = alias(d.true_hz.to_numpy(), fs)
+    d["aliased"] = d.true_hz > fs / 2
+    return d
+
+
+def explain_frequency(freq: float, sources: pd.DataFrame, tol: float = 0.25) -> str:
+    """Label a spectral peak by every candidate source whose apparent frequency is within
+    ``tol`` Hz; "alias:" marks sources folded down from above Nyquist. "" if none match."""
+    hit = sources[np.abs(sources.apparent_hz - freq) <= tol]
+    return " / ".join(("alias:" if a else "") + s for s, a in zip(hit.source, hit.aliased))
+
+
+def spectral_peaks(f: np.ndarray, p: np.ndarray, n: int = 12, min_prominence_db: float = 6.0,
+                   fmin: float = 0.5) -> pd.DataFrame:
+    """The n strongest peaks above fmin that stand >= min_prominence_db above their
+    surroundings, on the dB spectrum. Returns freq, level_db, prominence_db."""
+    db = 10 * np.log10(p + 1e-30)
+    df = f[1] - f[0]
+    idx, props = signal.find_peaks(db, prominence=min_prominence_db, distance=max(1, int(0.3 / df)))
+    keep = f[idx] >= fmin
+    idx, prom = idx[keep], props["prominences"][keep]
+    order = np.argsort(db[idx])[::-1][:n]
+    return pd.DataFrame({"freq": f[idx][order], "level_db": db[idx][order],
+                         "prominence_db": prom[order]})
+
+
+def excess_over_reference(f: np.ndarray, p: np.ndarray, p_ref: np.ndarray, freq: float,
+                          half_bw: float = 0.1) -> float:
+    """Power at ``freq`` +- half_bw relative to a reference spectrum on the same grid (dB)."""
+    m = (f >= freq - half_bw) & (f <= freq + half_bw)
+    return float(10 * np.log10(p[m].sum() / (p_ref[m].sum() + 1e-30)))
+
+
+REGIONS = ["subsync", "shaft", "shaft_alias", "line_alias", "other"]
+
+
+def region_masks(freqs: np.ndarray, f1: np.ndarray, supply_hz: np.ndarray, fs: float = FS,
+                 half_bw: float = 0.3, fmin: float = 0.5) -> dict[str, np.ndarray]:
+    """Split each window's spectrum into physically labelled regions. -> {name: (N, F) bool}
+
+    subsync      fmin <= f < 0.8 f1: below running speed (structural, looseness, slip beats)
+    shaft        k f1 +- half_bw for every in-band harmonic (k f1 < Nyquist)
+    shaft_alias  alias(k f1) +- half_bw for harmonics above Nyquist (k <= 8)
+    line_alias   alias(m f_supply) +- half_bw for m f_supply above Nyquist (m = 2..4);
+                 2x line is the voltage-imbalance signature
+    other        every remaining bin from fmin to Nyquist (broadband, unexplained peaks)
+    A bin claimed by an earlier region is not counted again in a later one.
+    """
+    F, N = freqs[None, :], len(f1)
+    f1, supply_hz = np.asarray(f1)[:, None], np.asarray(supply_hz, dtype=float)[:, None]
+    nyq = fs / 2
+    near = lambda c: np.abs(F - c) <= half_bw                          # noqa: E731
+    shaft = np.zeros((N, freqs.size), bool)
+    shaft_alias = np.zeros_like(shaft)
+    for k in range(1, 9):
+        inside = k * f1 < nyq
+        shaft |= inside & near(k * f1)
+        shaft_alias |= ~inside & near(alias(k * f1, fs))
+    line_alias = np.zeros_like(shaft)
+    for m in range(2, 5):
+        line_alias |= (m * supply_hz > nyq) & near(alias(m * supply_hz, fs))
+    valid = (F >= fmin) & (F <= nyq)
+    out, taken = {}, np.zeros_like(shaft)
+    for name, m in (("subsync", F < 0.8 * f1), ("shaft", shaft), ("shaft_alias", shaft_alias),
+                    ("line_alias", line_alias), ("other", np.ones_like(shaft))):
+        out[name] = m & valid & ~taken
+        taken |= out[name]
+    return out
+
+
+def region_energies(w: np.ndarray, supply_hz: np.ndarray, fs: float = FS,
+                    half_bw: float = 0.3) -> pd.DataFrame:
+    """Per-window log10 share of spectral energy in each of ``REGIONS``, plus log10 total.
+
+    w: (N, L, C) zero-mean windows; Hann periodogram summed over channels. f1 per window is
+    the same running-speed estimate the features use. Columns are named "region_<name>"
+    so ``pair_fisher_table`` can score them like features. A region with no bins in a
+    window (e.g. line_alias at 50 Hz supply, where 2x line folds to DC) reads -12.
+    """
+    f, p = signal.periodogram(w, fs=fs, window="hann", axis=1)
+    p = p.sum(axis=-1)                                                  # (N, F)
+    f1 = running_speed(f, p[:, None, :], np.asarray(supply_hz, dtype=float))
+    masks = region_masks(f, f1, supply_hz, fs, half_bw)
+    total = p[:, 1:].sum(axis=1) + 1e-30
+    cols = {f"region_{k}": np.log10((p * m).sum(axis=1) / total + 1e-12) for k, m in masks.items()}
+    cols["region_total"] = np.log10(total)
+    return pd.DataFrame(cols)
+
+
+def peak_category(label: str) -> str:
+    """Collapse an ``explain_frequency`` label into one category for counting.
+
+    An in-band explanation wins over an aliased one: a peak at 2 f1 that is also the alias
+    of some higher harmonic is counted as in-band, since that needs no aliasing to exist.
+    """
+    if not label:
+        return "unexplained"
+    direct = [p for p in label.split(" / ") if not p.startswith("alias:")]
+    if not direct:
+        return "aliased"
+    if any("f1" in p for p in direct):
+        return "in-band shaft"
+    return "in-band line" if any("line" in p for p in direct) else "in-band bearing"

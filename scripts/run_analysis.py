@@ -4,6 +4,7 @@ Stages:
   fisher    per-feature, per-class-pair held-out Fisher scores (2a)
   sidebands rotor-bar sidebands: does R differ from the other classes? (2b; needs data/raw
             and pair_fisher.csv from the fisher stage)
+  aliasing  B3 and V: aliased energy or low-frequency secondary effects? (2c; needs data/raw)
 
 Outputs (results/analysis/):
   pair_fisher_folds.csv   every (fold, pair, feature) score
@@ -16,6 +17,13 @@ Outputs (results/analysis/):
                           (0.012 Hz Welch spectrum), and aliased shaft harmonics on them
   sideband_ranks.csv      R's rank among the 6 classes at each condition, per measure
   r_vs_b2.csv             held-out J of every feature for the R-B2 pair
+  regions.csv             held-out J per spectral region (sub-synchronous, shaft harmonics,
+                          aliased shaft / line harmonics, other), total level and slip,
+                          for every pair involving B3 or V
+  regions_line_alias_30hz.csv  the 2x-line alias at 30 Hz supply only (the one speed where
+                          it lands on its own bin)
+  peaks.csv               strongest spectral peaks of every recording, the known source each
+                          matches (in-band or aliased), and its level over H at that condition
   runlog.json
 
 Held-out scores always come from evaluation.transfer_fisher on grouped folds.
@@ -35,13 +43,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from motorpr import analysis as an  # noqa: E402
-from motorpr.data import load_all  # noqa: E402
+from motorpr.data import load_all, windows_with_meta  # noqa: E402
 from motorpr.evaluation import recording_folds  # noqa: E402
 from motorpr.features import SIDEBAND  # noqa: E402
 from motorpr.runlog import write_runlog  # noqa: E402
 
 OUT = ROOT / "results" / "analysis"
-STAGES = ("fisher", "sidebands")
+STAGES = ("fisher", "sidebands", "aliasing")
+EXCESS_DB = 10.0     # a peak counts as class-specific when it is this far above H
 
 
 def stage_fisher(meta: pd.DataFrame, F: pd.DataFrame, seed: int) -> None:
@@ -119,6 +128,66 @@ def stage_sidebands(meta: pd.DataFrame, F: pd.DataFrame) -> None:
                     .itertuples()))
 
 
+def stage_aliasing(meta: pd.DataFrame, F: pd.DataFrame, seed: int) -> None:
+    recs = load_all()
+
+    # window level: held-out J of each spectral region, total level and slip
+    W, meta_w = windows_with_meta(recs)
+    assert (meta_w[["rec_id", "win_idx"]].to_numpy() == meta[["rec_id", "win_idx"]].to_numpy()).all()
+    R = an.region_energies(W, meta_w["supply_hz"].to_numpy())
+    del W
+    R["mech_slip"] = F["gX_slip"].to_numpy()
+    folds = recording_folds(meta, "grouped", seed)
+    s = an.summarise_pair_fisher(an.pair_fisher_table(R, meta, folds))
+    s = s[s.class_a.isin(["B3", "V"]) | s.class_b.isin(["B3", "V"])].copy()
+    s["pair"] = s.class_a + "-" + s.class_b
+    s.to_csv(OUT / "regions.csv", index=False)
+    print("[aliasing] median held-out J per measure, pairs involving B3 or V:")
+    print(s.pivot(index="feature", columns="pair", values="j_heldout").round(2).to_string())
+    print("Median log10 energy share at aliased shaft harmonics, and log10 total level:")
+    print(pd.concat([meta[["label", "load"]], R], axis=1).groupby(["label", "load"])
+          [["region_shaft_alias", "region_total"]].median().unstack().round(2).to_string())
+
+    # 2x line (the V signature) folds to DC at 50 Hz and onto ~f1 at 40 Hz; only at 30 Hz
+    # does it land on a distinct bin (40 Hz). Score it there alone: 2 usable folds.
+    m30 = (meta.supply_hz == 30).to_numpy()
+    sub = meta[m30].reset_index(drop=True)
+    f30 = [(tr, te) for tr, te in recording_folds(sub, "grouped", seed)
+           if len(te) and sub.label.iloc[te].nunique() == len(an.CLASSES)]
+    s30 = an.summarise_pair_fisher(an.pair_fisher_table(
+        R.loc[m30, ["region_line_alias"]].reset_index(drop=True), sub, f30))
+    s30 = s30[s30.class_a.isin(["B3", "V"]) | s30.class_b.isin(["B3", "V"])]
+    s30.assign(supply_hz=30, n_folds=len(f30)).to_csv(OUT / "regions_line_alias_30hz.csv",
+                                                       index=False)
+    print(f"\n2x-line alias (40 Hz) at 30 Hz supply only, {len(f30)} folds: " + ", ".join(
+        f"{r.class_a}-{r.class_b} {r.j_heldout:.2f}" for r in s30.itertuples()))
+
+    # recording level: strongest peaks, their likely source, and their level over H
+    spec = {r.rec_id: an.recording_spectrum(r.signal) for r in recs}
+    rows = []
+    for r in recs:
+        f, p = spec[r.rec_id]
+        f1 = an.refine_running_speed(f, p, r.supply_hz)
+        src = an.candidate_sources(f1, r.supply_hz)
+        p_h = spec[f"H_{r.load}_{r.supply_hz}Hz"][1]
+        for q in an.spectral_peaks(f, p).itertuples():
+            label = an.explain_frequency(q.freq, src)
+            rows.append(dict(rec_id=r.rec_id, label=r.label, load=r.load, supply_hz=r.supply_hz,
+                             f1=f1, freq=q.freq, order=q.freq / f1, level_db=q.level_db,
+                             prominence_db=q.prominence_db, source=label,
+                             category=an.peak_category(label),
+                             over_h_db=an.excess_over_reference(f, p, p_h, q.freq)))
+    peaks = pd.DataFrame(rows)
+    peaks.to_csv(OUT / "peaks.csv", index=False)
+    spec_pk = peaks[(peaks.label.isin(["B3", "V"])) & (peaks.over_h_db >= EXCESS_DB)]
+    print(f"\nPeaks of B3 / V standing >= {EXCESS_DB:.0f} dB over H at the same condition, "
+          "by likely source:")
+    print(spec_pk.groupby(["label", "category"]).size().unstack(fill_value=0).to_string())
+    print("\nOver-H level of every peak, median per recording (dB):")
+    print(peaks[peaks.label.isin(["B3", "V"])].groupby(["label", "load", "supply_hz"])
+          .over_h_db.median().unstack().round(1).to_string())
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stages", nargs="+", choices=STAGES, default=list(STAGES))
@@ -132,6 +201,8 @@ def main() -> None:
         stage_fisher(meta, F, args.seed)
     if "sidebands" in args.stages:
         stage_sidebands(meta, F)
+    if "aliasing" in args.stages:
+        stage_aliasing(meta, F, args.seed)
     write_runlog(OUT, **vars(args), split="grouped", n_windows=len(F))
 
 

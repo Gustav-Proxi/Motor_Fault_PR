@@ -24,7 +24,7 @@ Use the cached features (`data/processed/features_clean.parquet`, made by `run_b
 - [x] **2b.** R vs B2: do the rotor-bar sideband features actually differ between R and the other classes?
 - [x] **2c.** B3 and V: is any separability coming from aliased energy or from low-frequency secondary effects? Lead: the loaded 30 Hz recordings show strong 28/42 Hz peaks.
 - [x] **4a.** Write up the two DTW options with a recommendation: (a) drop it with a justification, or (b) use it as a DTW k-NN baseline on window envelopes.
-- [ ] **4b.** If (b) is cheap, prototype it. Final call made together. If we choose (a), this slot becomes a fresh-clone run of the full pipeline, fixing whatever breaks.
+- [x] **4b.** If (b) is cheap, prototype it. Final call made together. If we choose (a), this slot becomes a fresh-clone run of the full pipeline, fixing whatever breaks.
 - [x] **5a.** Kernel PCA (RBF) as a non-linear front-end, with its tests. Merge before 1c so the multi-seed rerun includes it.
 - [ ] **5b.** Nested hyperparameter tuning (currently fixed: k=5, C=10, 300 trees).
 - [x] **T1.** Tests for `analysis.py`.

@@ -29,7 +29,7 @@ Use the cached features (`data/processed/features_clean.parquet`, made by `run_b
 - [x] **5b.** Nested hyperparameter tuning (currently fixed: k=5, C=10, 300 trees).
 - [x] **T1.** Tests for `analysis.py`.
 - [x] **F1.** Final analysis figures and tables for the report.
-- [ ] **R2.** Report: separability analysis section.
+- [x] **R2.** Report: separability analysis section.
 - [ ] **R3.** Report: DTW section.
 - [ ] **R4.** Report: Kernel PCA and tuning results.
 

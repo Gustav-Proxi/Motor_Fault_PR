@@ -36,7 +36,15 @@ def recording_folds(meta: pd.DataFrame, mode: str = "grouped", seed: int = 0
                 (leave-one-condition-out: test condition never seen in training).
     naive     — stratified random split over windows; leaks overlapping windows of the same
                 recording across train/test. Reported only to measure that leakage.
+    cross_speed — one fold: train on 30 + 50 Hz supply, test on 40 Hz (both loads).
+    cross_load  — one fold: train unloaded, test loaded (all speeds).
+                The two OOD splits shift a whole operating condition for every class at
+                once; seed is unused because nothing is shuffled.
     """
+    if mode in ("cross_speed", "cross_load"):
+        test = (meta["supply_hz"] == 40) if mode == "cross_speed" else (meta["load"] == 1)
+        test = test.to_numpy()
+        return [(np.where(~test)[0], np.where(test)[0])]
     if mode == "naive":
         skf = StratifiedKFold(N_FOLDS, shuffle=True, random_state=seed)
         return list(skf.split(meta, meta["label"]))

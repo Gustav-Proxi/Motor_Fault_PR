@@ -12,7 +12,7 @@ The two tracks touch different files, so both can run at the same time without m
 - [ ] **1b.** Run corruption levels in parallel (target: full sweep in ~5–8 min, down from ~30).
 - [ ] **1c.** Rerun the baseline and both sweeps over ~5 seeds; report mean ± std.
 - [ ] **3a.** Cross-speed split (train 30 + 50 Hz, test 40 Hz) and cross-load split (train unloaded, test loaded).
-- [ ] **3b.** Subspace Alignment across supply frequencies.
+- [x] **3b.** Subspace Alignment across supply frequencies.
 - [ ] **R1.** Report: methods, validation and robustness sections.
 
 ## Sanika — analysis, DTW and extensions (items 2, 4, 5)

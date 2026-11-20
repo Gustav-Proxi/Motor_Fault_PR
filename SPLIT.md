@@ -20,7 +20,7 @@ The two tracks touch different files, so both can run at the same time without m
 **Owns:** new `src/motorpr/analysis.py`, new `scripts/run_analysis.py`, new `src/motorpr/kernel_pca.py`, new `src/motorpr/tuning.py`, their tests, `notebooks/`, and output under `results/analysis/`.
 Use the cached features (`data/processed/features_clean.parquet`, made by `run_baseline.py`) and the helpers in `evaluation.py` (`recording_folds`, `fisher_criterion`, `separability`) **read-only**. One exception: 5a adds its entry to `front_ends()`.
 
-- [ ] **2a.** Per-feature, per-class-pair Fisher scores (6 classes → 15 pairs × 126 features). Which features make B1 separable? Score on held-out recordings with `transfer_fisher`. Plain Fisher on a test fold only measures how distinct the recordings are.
+- [x] **2a.** Per-feature, per-class-pair Fisher scores (6 classes → 15 pairs × 126 features). Which features make B1 separable? Score on held-out recordings with `transfer_fisher`. Plain Fisher on a test fold only measures how distinct the recordings are.
 - [ ] **2b.** R vs B2: do the rotor-bar sideband features actually differ between R and the other classes?
 - [ ] **2c.** B3 and V: is any separability coming from aliased energy or from low-frequency secondary effects? Lead: the loaded 30 Hz recordings show strong 28/42 Hz peaks.
 - [ ] **4a.** Write up the two DTW options with a recommendation: (a) drop it with a justification, or (b) use it as a DTW k-NN baseline on window envelopes.

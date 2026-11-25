@@ -69,7 +69,7 @@ def run_level(recs: list[Recording], mode: str, level: float, args: argparse.Nam
               folds: list[tuple[np.ndarray, np.ndarray]]) -> tuple[str, float, list[dict], float]:
     """One (mode, level) cell of the sweep. Level 0 is the clean run, shared by every mode."""
     t0 = time.time()
-    fronts, clfs = front_ends(), classifiers(args.seed)
+    fronts, clfs = front_ends(seed=args.seed), classifiers(args.seed)
     if level == 0:
         res = evaluate(fronts, clfs, X_clean, y, folds)
     elif args.corrupt == "both":
@@ -93,14 +93,15 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-jobs", type=int, default=-1, help="worker processes (-1 = all cores)")
     args = ap.parse_args()
-    out = ROOT / "results" / f"corruption_{args.corrupt}"
+    name = f"corruption_{args.corrupt}"
+    out = ROOT / "results" / (name if args.seed == 0 else f"{name}_seed{args.seed}")
     out.mkdir(parents=True, exist_ok=True)
 
     recs = load_all()
     meta0, X_clean = features_for(recs, "noise", 0.0, args.seed)
     y = meta0["label"].to_numpy()
     folds = recording_folds(meta0, args.split, args.seed)
-    fronts, clfs = front_ends(), classifiers(args.seed)
+    fronts, clfs = front_ends(seed=args.seed), classifiers(args.seed)
 
     # corrupt() is the identity at level 0, so the clean run is computed once for all modes
     cells = ([(args.modes[0], 0.0)] if 0.0 in args.levels else [])

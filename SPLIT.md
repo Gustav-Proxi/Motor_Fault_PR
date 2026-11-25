@@ -10,10 +10,13 @@ The two tracks touch different files, so both can run at the same time without m
 
 - [x] **1a.** Corruption sweep: compute the clean (level 0) case once, not once per mode.
 - [x] **1b.** Run corruption levels in parallel (target: full sweep in ~5–8 min, down from ~30).
-- [ ] **1c.** Rerun the baseline and both sweeps over ~5 seeds; report mean ± std.
+- [x] **1c.** Rerun the baseline and both sweeps over ~5 seeds; report mean ± std.
 - [x] **3a.** Cross-speed split (train 30 + 50 Hz, test 40 Hz) and cross-load split (train unloaded, test loaded).
 - [x] **3b.** Subspace Alignment across supply frequencies.
 - [ ] **R1.** Report: methods, validation and robustness sections.
+- [ ] **P1.** Fresh-clone reproducibility run of the full pipeline from the README; fix whatever breaks.
+- [ ] **R6.** Report: `main.tex` assembling all sections, abstract and conclusion.
+- [ ] **S1.** Presentation slides (shared deck).
 
 ## Sanika — analysis, DTW and extensions (items 2, 4, 5)
 
@@ -32,6 +35,9 @@ Use the cached features (`data/processed/features_clean.parquet`, made by `run_b
 - [x] **R2.** Report: separability analysis section.
 - [x] **R3.** Report: DTW section.
 - [x] **R4.** Report: Kernel PCA and tuning results.
+- [x] **U1.** Interactive project UI (`ui/`, `scripts/export_ui_data.py`).
+- [ ] **U2.** UI: WebGL fallback, out-of-distribution and Subspace Alignment section, multi-seed sweep curves.
+- [ ] **R5.** Report: introduction, related work, references; R2–R4 updated to the final multi-seed run.
 
 ## Shared
 
@@ -50,12 +56,12 @@ Use the cached features (`data/processed/features_clean.parquet`, made by `run_b
 
 ## Commit balance
 
-Target: **12 commits each on `main`**, one per task. Check with `git shortlog -sn --no-merges origin/main`.
+Target: **15 commits each on `main`** (revised 2026-11-25), one per task. Check with `git shortlog -sn --no-merges origin/main`.
 
 | | Done | Still to do | Final |
 |---|---|---|---|
-| Vaishak | 6 (base pipeline, roadmap, 3 split docs, this revision) | 1a, 1b, 1c, 3a, 3b, R1 = 6 | **12** |
-| Sanika | 0 | 2a, 2b, 2c, 4a, 4b, 5a, 5b, T1, F1, R2, R3, R4 = 12 | **12** |
+| Vaishak | 6 (base pipeline, roadmap, 3 split docs, this revision) | 1a, 1b, 1c, 3a, 3b, R1, P1, R6, S1 = 9 | **15** |
+| Sanika | 0 | 2a, 2b, 2c, 4a, 4b, 5a, 5b, T1, F1, R2, R3, R4, U1, U2, R5 = 15 | **15** |
 
 - Everyone commits only work they did themselves, from their own account. Set `git config user.email` to an email on your GitHub account or the commits won't be credited to you.
 - No empty, formatting-only or split-up commits to move the count.

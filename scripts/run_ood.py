@@ -44,12 +44,12 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
-    out = ROOT / "results" / "ood"
+    out = ROOT / "results" / ("ood" if args.seed == 0 else f"ood_seed{args.seed}")
     out.mkdir(parents=True, exist_ok=True)
 
     meta, F = clean_features()
     X, y = F.to_numpy(), meta["label"].to_numpy()
-    fronts, clfs = front_ends(), classifiers(args.seed)
+    fronts, clfs = front_ends(seed=args.seed), classifiers(args.seed)
 
     rows, per_class, sep, cms = [], [], [], {}
     for split in SPLITS:

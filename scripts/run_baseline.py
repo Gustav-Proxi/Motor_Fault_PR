@@ -73,14 +73,15 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
-    out = ROOT / "results" / "baseline"
+    # seed 0 keeps the default path; other seeds get their own folder (1c)
+    out = ROOT / "results" / ("baseline" if args.seed == 0 else f"baseline_seed{args.seed}")
     out.mkdir(parents=True, exist_ok=True)
 
     meta, F = clean_features()
     X, y = F.to_numpy(), meta["label"].to_numpy()
     print(f"{X.shape[0]} windows x {X.shape[1]} features from {meta.rec_id.nunique()} recordings")
 
-    fronts, clfs = front_ends(), classifiers(args.seed)
+    fronts, clfs = front_ends(seed=args.seed), classifiers(args.seed)
     folds = {s: recording_folds(meta, s, args.seed) for s in SPLITS}
 
     rows, per_class, cms = [], [], {}

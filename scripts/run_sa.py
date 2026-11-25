@@ -73,7 +73,7 @@ def main() -> None:
     ap.add_argument("--n-jobs", type=int, default=-1)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
-    out = ROOT / "results" / "subspace_alignment"
+    out = ROOT / "results" / ("subspace_alignment" if args.seed == 0 else f"subspace_alignment_seed{args.seed}")
     out.mkdir(parents=True, exist_ok=True)
 
     meta, F = clean_features()

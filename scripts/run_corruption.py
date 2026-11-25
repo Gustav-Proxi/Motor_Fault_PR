@@ -7,7 +7,11 @@ Corruption is applied to each whole raw recording before windowing (src/motorpr/
 --corrupt test  train clean, test corrupted: a model deployed on a degraded sensor.
 
 Outputs: results/corruption_<corrupt>/metrics.csv, degradation_<mode>.png, runlog.json
+Levels run in parallel (--n-jobs worker processes). Each level's noise stream is keyed by
+(seed, mode, level, recording), so results do not depend on the number of workers.
+
 Usage:   python scripts/run_corruption.py [--corrupt both|test] [--levels 0 .1 .2 .3 .4 .5]
+                                          [--n-jobs N]
 """
 from __future__ import annotations
 
@@ -22,6 +26,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -46,6 +51,39 @@ def features_for(recs: list[Recording], mode: str, level: float, seed: int
     return meta, extract_features(W, meta["supply_hz"].to_numpy()).to_numpy()
 
 
+def evaluate(fronts: dict, clfs: dict, X: np.ndarray, y: np.ndarray,
+             folds: list[tuple[np.ndarray, np.ndarray]]) -> list[dict]:
+    """Every front-end x classifier on one feature matrix."""
+    rows = []
+    for fname, front in fronts.items():
+        sep = projected_separability(front, X, y, folds)
+        for cname, clf in clfs.items():
+            r = run_cv(make_pipeline(front, clf), X, y, folds)
+            rows.append(dict(front=fname, clf=cname, acc=r["acc"], macro_f1=r["macro_f1"],
+                             fisher_heldout=sep["fisher_heldout"]))
+    return rows
+
+
+def run_level(recs: list[Recording], mode: str, level: float, args: argparse.Namespace,
+              X_clean: np.ndarray, y: np.ndarray,
+              folds: list[tuple[np.ndarray, np.ndarray]]) -> tuple[str, float, list[dict], float]:
+    """One (mode, level) cell of the sweep. Level 0 is the clean run, shared by every mode."""
+    t0 = time.time()
+    fronts, clfs = front_ends(), classifiers(args.seed)
+    if level == 0:
+        res = evaluate(fronts, clfs, X_clean, y, folds)
+    elif args.corrupt == "both":
+        _, X_cor = features_for(recs, mode, level, args.seed)
+        res = evaluate(fronts, clfs, X_cor, y, folds)
+    else:
+        _, X_cor = features_for(recs, mode, level, args.seed)
+        # stack clean (train) and corrupted (test) copies; fold indices point into each half
+        n = len(X_clean)
+        res = evaluate(fronts, clfs, np.vstack([X_clean, X_cor]), np.concatenate([y, y]),
+                       [(tr, te + n) for tr, te in folds])
+    return mode, level, res, time.time() - t0
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--corrupt", choices=("both", "test"), default="both")
@@ -53,6 +91,7 @@ def main() -> None:
     ap.add_argument("--modes", nargs="+", default=list(MODES))
     ap.add_argument("--split", default="grouped", choices=("grouped", "condition"))
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--n-jobs", type=int, default=-1, help="worker processes (-1 = all cores)")
     args = ap.parse_args()
     out = ROOT / "results" / f"corruption_{args.corrupt}"
     out.mkdir(parents=True, exist_ok=True)
@@ -63,31 +102,24 @@ def main() -> None:
     folds = recording_folds(meta0, args.split, args.seed)
     fronts, clfs = front_ends(), classifiers(args.seed)
 
-    rows = []
-    for mode in args.modes:
-        for level in args.levels:
-            t0 = time.time()
-            _, X_cor = features_for(recs, mode, level, args.seed)
-            if args.corrupt == "both":
-                X, cv_folds = X_cor, folds
-            else:
-                # stack clean (train) and corrupted (test) copies; fold indices point into each half
-                X = np.vstack([X_clean, X_cor])
-                n = len(X_clean)
-                cv_folds = [(tr, te + n) for tr, te in folds]
-            yy = np.concatenate([y, y]) if args.corrupt == "test" else y
-            for fname, front in fronts.items():
-                sep = projected_separability(front, X, yy, cv_folds)
-                for cname, clf in clfs.items():
-                    r = run_cv(make_pipeline(front, clf), X, yy, cv_folds)
-                    rows.append(dict(mode=mode, level=level, front=fname, clf=cname,
-                                     acc=r["acc"], macro_f1=r["macro_f1"],
-                                     fisher_heldout=sep["fisher_heldout"]))
-            best = max((r for r in rows if r["mode"] == mode and r["level"] == level),
-                       key=lambda r: r["macro_f1"])
-            print(f"{mode:8s} {level:.1f}  best F1 {best['macro_f1']:.3f} "
-                  f"({best['front']}+{best['clf']})  [{time.time() - t0:.0f}s]", flush=True)
-            pd.DataFrame(rows).to_csv(out / "metrics.csv", index=False)
+    # corrupt() is the identity at level 0, so the clean run is computed once for all modes
+    cells = ([(args.modes[0], 0.0)] if 0.0 in args.levels else [])
+    cells += [(m, lv) for m in args.modes for lv in args.levels if lv != 0]
+    done = {}
+    jobs = Parallel(n_jobs=args.n_jobs, return_as="generator_unordered")(
+        delayed(run_level)(recs, m, lv, args, X_clean, y, folds) for m, lv in cells)
+    for mode, level, res, secs in jobs:
+        done[mode, level] = res
+        best = max(res, key=lambda r: r["macro_f1"])
+        label = "clean" if level == 0 else f"{mode:8s} {level:.1f}"
+        print(f"{label:12s}  best F1 {best['macro_f1']:.3f} "
+              f"({best['front']}+{best['clf']})  [{secs:.0f}s]", flush=True)
+
+    clean = done.get((args.modes[0], 0.0))
+    rows = [dict(mode=m, level=lv, **r)
+            for m in args.modes for lv in args.levels
+            for r in (clean if lv == 0 else done[m, lv])]
+    pd.DataFrame(rows).to_csv(out / "metrics.csv", index=False)
 
     df = pd.DataFrame(rows)
     for mode, d in df.groupby("mode"):

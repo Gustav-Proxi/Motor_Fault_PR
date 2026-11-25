@@ -25,10 +25,22 @@ python scripts/run_analysis.py                   # separability analysis (2a-2c)
 python scripts/run_dtw.py                        # DTW k-NN baseline -> results/dtw/
 python scripts/run_tuning.py                     # nested grouped tuning -> results/tuning/
 python scripts/make_report_figures.py            # report figures + tables -> report/figures, report/tables
+python scripts/export_ui_data.py                 # data bundle for the interactive UI -> ui/public/data/
 python -m pytest                                 # tests
 ```
 
 `run_baseline.py` caches features at `data/processed/features_clean.parquet`; delete it after changing feature or windowing code. The last four scripts read that cache, so run `run_baseline.py` first. `make_report_figures.py` also reads the CSVs the three scripts before it write, so keep that order. `run_dtw.py` and `run_tuning.py` use one or two CPU cores and save partial results, so an interrupted run resumes where it stopped. Each results folder gets a `runlog.json` with seed, parameters, library versions and dataset version.
+
+## Interactive UI
+
+`ui/` is a single-page site that walks through the project. It covers the motor and its fault signatures, all 36 recordings with live spectra, aliasing, the validation protocol, a 3-D view of the PCA / LDA / Kernel PCA feature spaces, separability, the model grid, corruptions, DTW and tuning. It reads one data bundle exported from the results above:
+
+```bash
+python scripts/export_ui_data.py       # needs the feature cache and results/ (one core, a few seconds)
+cd ui && npm install && npm run dev    # http://localhost:5173
+```
+
+`npm run build` writes a static site to `ui/dist/` (`npm run preview` serves it). The k-NN, corruption, DTW and spectrum demos run in the browser on the exported windows, and animations pause when they are off screen. The bundle includes the corruption-sweep curves once `run_corruption.py` results exist.
 
 ## Layout
 
@@ -45,6 +57,7 @@ python -m pytest                                 # tests
 | `src/motorpr/tuning.py` | Nested recording-grouped hyperparameter tuning |
 | `scripts/` | Download and experiment entry points |
 | `report/` | Report figures, tables and section sources |
+| `ui/` | Interactive project site (React, Three.js); data from `scripts/export_ui_data.py` |
 | `tests/` | Unit tests on synthetic signals |
 
 ## Validation

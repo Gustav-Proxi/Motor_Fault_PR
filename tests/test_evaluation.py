@@ -39,6 +39,17 @@ def test_condition_folds_hold_out_one_condition():
         assert len(m.iloc[te][["load", "supply_hz"]].drop_duplicates()) == 1
 
 
+def test_ood_folds_hold_out_a_whole_condition():
+    m = _meta()
+    for mode, col, held in (("cross_speed", "supply_hz", {40}), ("cross_load", "load", {1})):
+        [(tr, te)] = recording_folds(m, mode)
+        assert set(m.iloc[te][col]) == held and held.isdisjoint(m.iloc[tr][col])
+        assert set(m.rec_id.iloc[tr]).isdisjoint(m.rec_id.iloc[te])
+        assert len(tr) + len(te) == len(m)
+        # every class is in both halves
+        assert m.iloc[tr].label.nunique() == m.iloc[te].label.nunique() == 6
+
+
 def test_naive_folds_do_leak():
     m = _meta()
     tr, te = recording_folds(m, "naive")[0]

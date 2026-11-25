@@ -1,0 +1,48 @@
+% R3: Dynamic Time Warping (Sanika). Numbers from scripts/run_dtw.py, seed 0; options and
+% decision record in DTW.md. Needs: graphicx, booktabs, amsmath.
+
+\section{Dynamic Time Warping}\label{sec:dtw}
+
+The proposal planned to use DTW on load-transition and speed-change segments. The
+published recordings contain no such segments: each is a steady 15-minute run at one
+speed and one load, cut into fixed-length windows, so there is no variable-length
+alignment problem to solve. We therefore use DTW where it can still apply, as the distance
+of a $k$-NN classifier between short sequences derived from each window, and ask whether
+elastic alignment adds anything.
+
+\textbf{Setup.} Each window is reduced to its amplitude envelope: the RMS of 16-sample
+frames on the three gravity-compensated axes, log-scaled, giving a $64\times3$ sequence.
+The distance is multivariate DTW with a Sakoe--Chiba band of $\pm$8 frames. Two controls
+use the same reference windows: the same envelopes with the band set to 0 (no warping),
+and Euclidean $k$-NN on the 126 standardised hand-written features. Evaluation uses the
+grouped folds. To keep the run to about a minute on one CPU core, the references are every
+12th window of each training recording ($\approx$450) and the queries every 4th window of
+each held-out recording (1,584 in total); with 50\% window overlap, neighbouring windows
+are near-duplicates.
+
+\begin{table}[t]
+  \centering
+  \caption{$k$-NN on window envelopes (grouped CV, mean $\pm$ std over 6 folds; recalls
+  pooled over folds). Chance macro-F1 is 0.17.}
+  \label{tab:dtw}
+  \resizebox{\columnwidth}{!}{\input{tables/tab_dtw.tex}}
+\end{table}
+
+\textbf{Results} (Table~\ref{tab:dtw}). Warping adds nothing measurable: DTW reaches a
+macro-F1 of 0.28 against 0.26 with no warping ($k=1$), a gap well inside the
+fold-to-fold spread of 0.07--0.13. Both envelope distances sit just below the hand-written
+features (0.30). This matches what the signals are: two windows of a steady-state run
+start at arbitrary points of the shaft cycle, so there is no common event for the warping
+path to line up, only random fluctuations. The envelope is nonetheless complementary to
+the features. It recognises R far better (recall 0.61 against 0.23) without simply
+over-predicting it (precision 0.45 against 0.13), and B1 far worse (recall 0.54 against
+0.97). The gain is concentrated in the unloaded runs (R recall 0.88 unloaded, 0.33
+loaded), although the features also do better there (0.40 against 0.05). We have not
+identified what the envelope responds to. It is not the loaded pole-pass modulation: a
+6.25\,Hz envelope resolves nothing above 3.1\,Hz, while the loaded spacing is
+3.5--10.1\,Hz (Sec.~\ref{sec:separability}).
+
+\textbf{Conclusion.} On steady-state recordings, DTW's alignment brings no benefit, and we
+keep it only as a negative-control baseline. Transition segments, the use the proposal had
+in mind, would need recordings of speed or load changes, which this dataset does not
+include.

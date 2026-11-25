@@ -1,0 +1,51 @@
+% R5: introduction and dataset (Sanika). Builds on the proposal's problem statement.
+
+\section{Introduction and Dataset}\label{sec:intro}
+
+Electric motor systems used 53\% of the world's electricity in 2023, 72\% in industry
+\cite{iea2025}. Vibration monitoring catches bearing and rotor faults before they cause a
+failure, but the standard diagnostics demodulate bearing-defect frequencies from accelerometers
+sampled at kilohertz rates \cite{randall2011}. The common benchmark, the Case Western Reserve
+bearing data, is sampled at 12 and 48\,kHz, and standard envelope analysis already diagnoses
+many of its faults \cite{smith2015}. Small workshops and farms skip that equipment and run motors to
+failure. A smartphone is already at every machine, but its inertial sensor logs at about 100\,Hz.
+
+At 100\,Hz nothing above the 50\,Hz Nyquist frequency survives \cite{shannon1949}: it is removed
+or folded back into the band. For the motor studied here (shaft speed $f_1 \approx 15$, 20 and 25\,Hz), the
+outer-race defect frequency of a cracked bearing (44--86\,Hz) and the twice-line-frequency
+signature of voltage imbalance (60--100\,Hz) lie above that limit, while the rotor-bar sidebands
+at $f_1 \pm 2sf_\mathrm{supply}$ \cite{nandi2005} and the impulsiveness caused by poor lubrication
+lie below it.
+The usual question, which classifier is best, therefore turns into a different one (Track 2:
+dimensionality reduction against noise and out-of-distribution data): \emph{which class
+structure survives the truncation, which projection preserves it, and how does it hold up when
+the sensor degrades or the operating condition changes?} Answering it needs an honest test.
+Overlapping windows cut from one recording are near-copies, and random splits over windows
+overstate vibration-diagnosis accuracy \cite{wheat2024}, a case of the leakage that inflates
+machine-learning results across fields \cite{kapoor2023}, so every result here holds out whole
+recordings and is repeated over five seeds. We contribute (i) a separability boundary: which
+fault information a 100\,Hz sensor keeps, which it hides, and why; (ii) the size of the leakage
+gap, from 1.00 macro-F1 on random splits to 0.47 on unseen recordings; and (iii) how the
+projections hold up under sensor corruption, an unseen speed or load, and domain adaptation.
+Sections~\ref{sec:methods}--\ref{sec:conclusion} give the methods, results and conclusions.
+
+\textbf{Related work.} Classical pipelines pair hand-crafted time- and frequency-domain features
+with PCA or LDA and a shallow classifier \cite{duda2001}; Kernel PCA \cite{scholkopf1998} is the
+non-linear variant, Subspace Alignment \cite{fernando2013} adapts such a subspace to a new
+operating condition, and DTW \cite{sakoe1978} compares waveforms without features. We test each
+at 100\,Hz on held-out recordings.
+
+\textbf{Dataset.} We use the public (CC BY 4.0) dataset of Ertar{\u{g}}{\i}n et al.~\cite{ertargin2026}. An iPhone 15 Pro Max lies on
+a squirrel-cage induction motor and logs six inertial channels at 100\,Hz: the raw accelerations
+$g_X, g_Y, g_Z$ and the gravity-compensated user accelerations $g^u_X, g^u_Y, g^u_Z$. There are
+six health states: healthy (H), insufficient lubrication (B1), severely insufficient lubrication
+(B2), a cracked outer bearing ring (B3), supply-voltage imbalance (V) and a broken rotor bar (R).
+Each class is recorded once at each of six operating conditions (supply frequency 30, 40 or
+50\,Hz, unloaded or loaded), giving 36 balanced recordings of about 15 minutes (90{,}000 samples
+per channel).
+
+\textbf{Pre-processing.} Each recording is cut into windows of 1{,}024 samples (10.24\,s, a
+0.098\,Hz frequency resolution) with a 512-sample step: 6{,}264 labelled windows, 174 per
+recording. The mean of each window is removed per channel, which drops gravity and sensor
+offset. Amplitudes are not normalised, because absolute vibration energy is discriminative;
+every scaling step is fitted inside the cross-validation folds.

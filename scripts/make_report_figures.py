@@ -5,9 +5,13 @@ and the feature cache (for the Kernel PCA Fisher-vs-k curve). Writes, under repo
   figures/fig_pair_j.pdf      held-out J for every class pair (2a)
   figures/fig_sidebands.pdf   predicted rotor-bar sidebands vs the feature's band (2b)
   figures/fig_regions.pdf     held-out J per spectral region for B3 / V pairs (2c)
-  figures/fig_kpca.pdf        Fisher J vs k incl. KPCA; default vs tuned macro-F1 (5a, 5b)
+  figures/fig_kpca.pdf        held-out Fisher J vs k over 5 seeds; default vs tuned macro-F1 (5a, 5b)
+  figures/fig_projection.pdf  PCA / LDA scatter of a held-out fold; confusion of the best model
+  figures/fig_fisher_k.pdf    held-out Fisher J vs k, PCA / LDA / Kernel PCA, 5 seeds (column width)
   tables/tab_b1.tex, tab_peaks.tex, tab_dtw.tex, tab_tuning.tex
-and results/analysis/kpca_fisher_vs_k.csv.
+and results/analysis/kpca_fisher_vs_k.csv, fisher_vs_k_seeds.csv, confusion_best_seed<k>.npy.
+The 5-seed quantities are recomputed here (one projection fit per fold; the 30 linear SVMs of
+the confusion matrix are cached), so this script does not need the other seeds' result folders.
 
 Usage: python scripts/make_report_figures.py [--seed 0]
 """
@@ -29,8 +33,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from motorpr import analysis as an  # noqa: E402
 from motorpr.data import CLASSES, RAW_DIR, load_recording  # noqa: E402
-from motorpr.evaluation import projected_separability, recording_folds  # noqa: E402
+from motorpr.evaluation import (classifiers, front_ends, make_pipeline,  # noqa: E402
+                                projected_separability, recording_folds, run_cv,
+                                transfer_fisher)
 from motorpr.kernel_pca import KernelPCA  # noqa: E402
+from motorpr.projections import LDA, PCA  # noqa: E402
 
 RES = ROOT / "results"
 FIG = ROOT / "report" / "figures"
@@ -43,6 +50,12 @@ INK, INK2, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 BLUES = LinearSegmentedColormap.from_list(
     "blues", ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"])
 COL1, COL2 = 3.5, 7.16          # IEEE single / double column width, inches
+SEEDS = (0, 1, 2, 3, 4)          # the 5-seed protocol of the report
+# Classes use categorical slots 1-6 (validated on adjacent pairs); in a scatter all six are on
+# screen together, so each class also gets its own marker.
+CLS_COLOR = dict(zip(CLASSES, ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]))
+CLS_MARKER = dict(zip(CLASSES, ["o", "s", "^", "D", "P", "X"]))
+BEST = ("raw", "svm_lin")        # best grouped model over 5 seeds (tab_grid.tex)
 
 
 def style() -> None:
@@ -220,16 +233,148 @@ def kpca_fisher_vs_k(seed: int) -> pd.DataFrame:
     return d
 
 
-def fig_kpca(seed: int) -> None:
-    fk = pd.concat([pd.read_csv(RES / "baseline" / "fisher_vs_k.csv"), kpca_fisher_vs_k(seed)])
-    tun = pd.read_csv(RES / "tuning" / "summary.csv")
-    fig, (a, b) = plt.subplots(1, 2, figsize=(COL2, 2.2))
+def fisher_vs_k_seeds(seeds=SEEDS) -> pd.DataFrame:
+    """Held-out (transfer) Fisher J of PCA, LDA and Kernel PCA for k = 1..5, per seed.
+
+    The first k components of a 5-component PCA / LDA / Kernel PCA fit are exactly the k-component
+    fit, so each projection is fitted once per fold and sliced. Fold mean per seed, as
+    run_baseline.py reports it.
+    """
+    path = RES / "analysis" / "fisher_vs_k_seeds.csv"
+    if path.exists():
+        return pd.read_csv(path)
+    meta, F = an.load_feature_cache()
+    X, y = F.to_numpy(), meta["label"].to_numpy()
+    rows = []
+    for seed in seeds:
+        per = []
+        for tr, te in recording_folds(meta, "grouped", seed):
+            for name, proj in (("pca", PCA(5)), ("lda", LDA(5)),
+                               ("kpca", KernelPCA(5, random_state=seed))):
+                pipe = make_pipeline([("proj", proj)], []).fit(X[tr], y[tr])
+                Z_tr, Z_te = pipe.transform(X[tr]), pipe.transform(X[te])
+                for k in range(1, 6):
+                    per.append(dict(proj=name, k=k, fisher_heldout=transfer_fisher(
+                        Z_tr[:, :k], y[tr], Z_te[:, :k], y[te])))
+        d = pd.DataFrame(per).groupby(["proj", "k"], as_index=False).fisher_heldout.mean()
+        rows.append(d.assign(seed=seed))
+        print(f"  Fisher vs k, seed {seed} done", flush=True)
+    out = pd.concat(rows, ignore_index=True)
+    out.to_csv(path, index=False)
+    return out
+
+
+def best_confusion(seeds=SEEDS) -> np.ndarray:
+    """Grouped-CV confusion of the best model (BEST), summed over seeds.
+
+    Uses results/baseline[_seed<k>]/confusion.npz when the 5-seed run is present, otherwise fits
+    the model here and caches it in results/analysis/confusion_best_seed<k>.npy.
+    """
+    key = f"grouped|{BEST[0]}|{BEST[1]}"
+    total = np.zeros((len(CLASSES), len(CLASSES)), dtype=int)
+    meta = X = y = None
+    for seed in seeds:
+        npz = RES / ("baseline" if seed == 0 else f"baseline_seed{seed}") / "confusion.npz"
+        cache = RES / "analysis" / f"confusion_best_seed{seed}.npy"
+        if npz.exists() and key in np.load(npz).files:
+            cm = np.load(npz)[key]
+        elif cache.exists():
+            cm = np.load(cache)
+        else:
+            if meta is None:
+                meta, F = an.load_feature_cache()
+                X, y = F.to_numpy(), meta["label"].to_numpy()
+            pipe = make_pipeline(front_ends(seed=seed)[BEST[0]], classifiers(seed)[BEST[1]])
+            cm = run_cv(pipe, X, y, recording_folds(meta, "grouped", seed))["confusion"]
+            np.save(cache, cm)
+            print(f"  confusion, seed {seed} done", flush=True)
+        total += cm
+    return total
+
+
+def fig_projection(seed: int) -> None:
+    """(a, b) PCA and LDA fitted on the training recordings of grouped fold 1, every window
+    projected; (c) row-normalised confusion of the best model over 5 seeds."""
+    meta, F = an.load_feature_cache()
+    X, y = F.to_numpy(), meta["label"].to_numpy()
+    tr, te = recording_folds(meta, "grouped", seed)[0]
+    fig = plt.figure(figsize=(COL2, 1.9))
+    gs = fig.add_gridspec(1, 3, width_ratios=[1, 1, 0.92], wspace=0.32, bottom=0.27, top=0.9)
+    for i, (name, proj) in enumerate((("PCA", PCA(2)), ("LDA", LDA(2)))):
+        ax = fig.add_subplot(gs[i])
+        Z = make_pipeline([("proj", proj)], []).fit(X[tr], y[tr]).transform(X)
+        for c in CLASSES:
+            m_tr = tr[y[tr] == c][::4]
+            m_te = te[y[te] == c][::2]
+            ax.scatter(Z[m_tr, 0], Z[m_tr, 1], s=2, color=CLS_COLOR[c], alpha=0.25, lw=0,
+                       rasterized=True)
+            ax.scatter(Z[m_te, 0], Z[m_te, 1], s=9, color=CLS_COLOR[c], marker=CLS_MARKER[c],
+                       edgecolor="white", linewidth=0.3, alpha=0.9, label=c, rasterized=True)
+        pts = Z[np.concatenate([tr[::4], te[::2]])]
+        lo, hi = np.percentile(pts, 0.5, axis=0), np.percentile(pts, 99.5, axis=0)
+        pad = 0.06 * (hi - lo)
+        ax.set_xlim(lo[0] - pad[0], hi[0] + pad[0])
+        ax.set_ylim(lo[1] - pad[1], hi[1] + pad[1])
+        ax.set_xlabel(f"{name} 1")
+        ax.set_ylabel(f"{name} 2")
+        ax.set_title(f"({'ab'[i]}) {name}, held-out fold", loc="left")
+        ax.tick_params(labelsize=6)
+    ax = fig.add_subplot(gs[2])
+    cm = best_confusion()
+    cmn = cm / cm.sum(axis=1, keepdims=True)
+    ax.imshow(cmn, cmap=BLUES, vmin=0, vmax=1)
+    for i in range(6):
+        for j in range(6):
+            if cmn[i, j] >= 0.005:
+                ax.text(j, i, f"{cmn[i, j]:.2f}".lstrip("0"), ha="center", va="center", fontsize=6,
+                        color="white" if cmn[i, j] > 0.5 else INK)
+    ax.set_xticks(range(6), CLASSES)
+    ax.set_yticks(range(6), CLASSES)
+    ax.grid(False)
+    ax.set_xlabel("predicted")
+    ax.set_ylabel("true")
+    ax.set_title("(c) Raw + linear SVM, 5 seeds", loc="left")
+    handles, labels = fig.axes[0].get_legend_handles_labels()
+    handles.append(plt.Line2D([], [], ls="", marker="o", ms=2, color=INK2, alpha=0.5))
+    labels.append("training windows")
+    fig.legend(handles, labels, loc="lower center", ncol=7, bbox_to_anchor=(0.36, -0.01),
+               markerscale=1.4, handletextpad=0.2, columnspacing=1.0)
+    save(fig, "fig_projection")
+
+
+def fig_fisher_k() -> None:
+    """Held-out Fisher J against k for PCA, LDA and Kernel PCA, mean +- std over 5 seeds."""
+    fk = fisher_vs_k_seeds().groupby(["proj", "k"]).fisher_heldout.agg(["mean", "std"]).reset_index()
+    fig, a = plt.subplots(figsize=(COL1, 1.1))
     for i, (name, lab) in enumerate((("pca", "PCA"), ("lda", "LDA"), ("kpca", "Kernel PCA"))):
         d = fk[fk.proj == name].sort_values("k")
-        a.plot(d.k, d.fisher_heldout, marker="o", ms=4, color=SERIES[i], label=lab,
+        a.fill_between(d.k, d["mean"] - d["std"], d["mean"] + d["std"], color=SERIES[i],
+                       alpha=0.12, lw=0)
+        a.plot(d.k, d["mean"], marker="o", ms=4, color=SERIES[i], label=lab,
+               markeredgecolor="white", markeredgewidth=0.6)
+        a.annotate(f"{d['mean'].iloc[-1]:.1f}", (5, d["mean"].iloc[-1]), xytext=(5, -2 if name != "kpca" else 3),
+                   textcoords="offset points", fontsize=6.5, color=INK2, va="center")
+    a.set_xlabel("projected dimensions $k$")
+    a.set_ylabel("held-out Fisher $J$")
+    a.set_xticks(range(1, 6))
+    a.set_xlim(0.8, 5.6)
+    a.legend(loc="upper left")
+    save(fig, "fig_fisher_k")
+
+
+def fig_kpca(seed: int) -> None:
+    kpca_fisher_vs_k(seed)                                   # seed-0 curve for the UI bundle
+    fk = fisher_vs_k_seeds().groupby(["proj", "k"]).fisher_heldout.agg(["mean", "std"]).reset_index()
+    tun = pd.read_csv(RES / "tuning" / "summary.csv")
+    fig, (a, b) = plt.subplots(1, 2, figsize=(COL2, 2.0))
+    for i, (name, lab) in enumerate((("pca", "PCA"), ("lda", "LDA"), ("kpca", "Kernel PCA"))):
+        d = fk[fk.proj == name].sort_values("k")
+        a.fill_between(d.k, d["mean"] - d["std"], d["mean"] + d["std"], color=SERIES[i],
+                       alpha=0.12, lw=0)
+        a.plot(d.k, d["mean"], marker="o", ms=4, color=SERIES[i], label=lab,
                markeredgecolor="white", markeredgewidth=0.6)
     a.set_xlabel("projected dimensions $k$")
-    a.set_ylabel("held-out Fisher J")
+    a.set_ylabel("held-out Fisher J (5 seeds)")
     a.set_xticks(range(1, 6))
     a.legend()
 
@@ -268,10 +413,16 @@ def tab_tuning() -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--only", nargs="+", help="run only these figure/table functions")
     args = ap.parse_args()
     FIG.mkdir(parents=True, exist_ok=True)
     TAB.mkdir(parents=True, exist_ok=True)
     style()
+    if args.only:
+        for name in args.only:
+            fn = globals()[name]
+            fn(args.seed) if name in ("fig_kpca", "fig_projection") else fn()  # noqa: B018
+        return
     fig_pair_j()
     tab_b1()
     fig_sidebands()
@@ -279,6 +430,8 @@ def main() -> None:
     tab_peaks()
     tab_dtw()
     fig_kpca(args.seed)
+    fig_projection(args.seed)
+    fig_fisher_k()
     tab_tuning()
     print("tables in", TAB)
 

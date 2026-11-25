@@ -39,7 +39,7 @@ python scripts/run_dtw.py                        # -> results/dtw/
 python scripts/run_tuning.py                     # -> results/tuning/
 
 # 4. report tables and figures, then the PDF
-python scripts/make_report_figures.py            # separability / DTW / Kernel PCA figures and tables
+python scripts/make_report_figures.py            # separability, DTW, Kernel PCA, projection + confusion figures; tables
 python scripts/make_methods_tables.py            # model grid, splits, OOD, SA tables; corruption figure
 (cd report && latexmk -pdf main.tex)             # report/main.pdf
 

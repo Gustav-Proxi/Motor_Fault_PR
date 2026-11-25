@@ -88,7 +88,9 @@ export function Models() {
   const d = useData();
   const { t } = useTheme();
   const [split, setSplit] = useState<Split>("grouped");
-  const [sel, setSel] = useState("lda5|rf");
+  const gbest = d.metrics.filter((x) => x.split === "grouped").reduce((a, b) => (b.macro_f1 > a.macro_f1 ? b : a));
+  const [sel, setSel] = useState(`${gbest.front}|${gbest.clf}`);
+  const multi = d.meta.grid_seeds > 1;
   const [f, c] = sel.split("|");
   const cm = d.confusion[`${split}|${sel}`];
   const m = d.metrics.find((x) => x.split === split && x.front === f && x.clf === c)!;
@@ -100,12 +102,12 @@ export function Models() {
     <Section id="models" eyebrow="Model arena" tags={["baseline"]}
       title="Five front-ends × six classifiers"
       lede={<>Every model is a single pipeline (scaling, projection, classifier) fitted on the training fold only. Switch to the
-        <b> naive</b> split and every cell turns near-perfect. That is the leakage. On unseen recordings, LDA-5 followed by a random
-        forest is best, and kernel PCA is worst.</>}>
+        <b> naive</b> split and every cell turns near-perfect. That is the leakage. On unseen recordings{" "}
+        {FRONT_LABEL[gbest.front]} with a {CLF_LABEL[gbest.clf].replace(/^(Linear|Random)\b/, (s) => s.toLowerCase())} is best, and Kernel PCA is worst.</>}>
       <div className="split">
         <div className="card">
           <div className="controls" style={{ justifyContent: "space-between" }}>
-            <h3>Macro-F1, mean of 6 folds</h3>
+            <h3>Macro-F1, {multi ? `mean of ${d.meta.grid_seeds} seeds × 6 folds` : "mean of 6 folds (seed 0)"}</h3>
             <Seg value={split} onChange={setSplit} options={[{ value: "grouped", label: "Grouped" }, { value: "condition", label: "Leave condition out" }, { value: "naive", label: "Naive" }]} />
           </div>
           <Grid split={split} sel={sel} onSel={setSel} />
@@ -115,7 +117,7 @@ export function Models() {
         </div>
         <div className="card">
           <h3>{FRONT_LABEL[f]} + {CLF_LABEL[c]}</h3>
-          <p className="sub">{split} split · macro-F1 <b style={{ color: "var(--ink)" }}><Counter value={m.macro_f1} duration={0.6} /></b> ± {m.macro_f1_std.toFixed(2)} across folds</p>
+          <p className="sub">{split} split · macro-F1 <b style={{ color: "var(--ink)" }}><Counter value={m.macro_f1} duration={0.6} /></b> ± {m.macro_f1_std.toFixed(2)} across {multi ? "seeds" : "folds"}{multi ? " · confusion and recall below: seed 0" : ""}</p>
           <Confusion cm={cm} />
           <div ref={ref} style={{ marginTop: 12 }}>
             <span className="ctl-label">Recall per class</span>

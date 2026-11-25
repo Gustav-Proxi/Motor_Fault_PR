@@ -11,6 +11,9 @@ Bundle contents:
   spectra      whole-recording Welch PSD (8192-sample segments) per recording, dB, int16
   embedding    every window projected to 5-D by each front-end, fitted per grouped fold
   results      metrics, confusions, separability, analysis, DTW and tuning tables
+  multi-seed   model grid, corruption sweeps, OOD splits and Subspace Alignment as mean +- std
+               over every seed found (results/<name>[_seed<k>]/ or results/multiseed/);
+               meta.grid_seeds says how many seeds the model grid averages (1 = seed 0 only)
 
 Usage: python scripts/export_ui_data.py [--seed 0]
 """
@@ -40,6 +43,7 @@ from motorpr.analysis import (BPFI_ORDER, BPFO_ORDER, load_feature_cache,  # noq
 from motorpr.data import CLASSES, FS, STEP, WINDOW, load_all  # noqa: E402
 from motorpr.evaluation import (fisher_criterion, front_ends, make_pipeline,  # noqa: E402
                                 recording_folds, transfer_fisher)
+import aggregate_seeds  # noqa: E402  (scripts/ is on sys.path when run as a script)
 
 RESULTS = ROOT / "results"
 OUT = ROOT / "ui" / "public" / "data" / "bundle.json"
@@ -136,6 +140,60 @@ def embeddings(F: pd.DataFrame, meta: pd.DataFrame, folds, seed: int) -> dict:
                 proj=out, fisher=fisher)
 
 
+def records(df: pd.DataFrame | None) -> list[dict] | None:
+    return None if df is None else json.loads(df.to_json(orient="records"))   # NaN -> null
+
+
+def multiseed(name: str, table: str) -> pd.DataFrame | None:
+    """Mean and std over seeds of results/<name>[_seed<k>]/<table>.csv, with n_seeds.
+
+    Aggregated here from the per-seed folders, like scripts/aggregate_seeds.py does; if
+    results/multiseed/<name>__<table>.csv covers more seeds (e.g. copied from the cluster run),
+    that file is used instead. None when neither exists.
+    """
+    _, _, keys, values = next(t for t in aggregate_seeds.TABLES if t[:2] == (name, table))
+    frames = [pd.read_csv(d / f"{table}.csv").assign(seed=k)
+              for k, d in aggregate_seeds.seed_dirs(name).items() if (d / f"{table}.csv").exists()]
+    local = None
+    if frames:
+        df = pd.concat(frames, ignore_index=True)
+        cols = [c for c in values if c in df.columns]
+        local = df.groupby(keys, sort=False)[cols].agg(["mean", "std"])
+        local.columns = [f"{c}_{stat}" for c, stat in local.columns]
+        local["n_seeds"] = df.groupby(keys, sort=False)["seed"].nunique()
+        local = local.reset_index()
+    path = RESULTS / "multiseed" / f"{name}__{table}.csv"
+    shared = pd.read_csv(path) if path.exists() else None
+    found = [d for d in (local, shared) if d is not None]
+    return max(found, key=lambda d: d.n_seeds.max()) if found else None
+
+
+def model_grid() -> tuple[list[dict] | None, int]:
+    """Grouped / condition / naive macro-F1 per model: the multi-seed mean when at least two
+    seeds exist (std over seeds), otherwise seed 0 (std over folds)."""
+    ms = multiseed("baseline", "metrics")
+    if ms is not None and ms.n_seeds.min() >= 2:
+        grid = ms.rename(columns={"macro_f1_mean": "macro_f1", "macro_f1_std": "macro_f1_std",
+                                  "acc_mean": "acc", "acc_std": "acc_std"})
+        return records(grid[["split", "front", "clf", "acc", "acc_std", "macro_f1",
+                             "macro_f1_std", "n_seeds"]]), int(ms.n_seeds.min())
+    return read_csv(RESULTS / "baseline" / "metrics.csv"), 1
+
+
+def fisher_curves() -> list[dict]:
+    """Fisher J vs k. Held-out J is the 5-seed mean +- std when make_report_figures.py has
+    written analysis/fisher_vs_k_seeds.csv; in-sample J is always seed 0."""
+    seed0 = pd.concat([pd.read_csv(p) for p in (RESULTS / "baseline" / "fisher_vs_k.csv",
+                                                 RESULTS / "analysis" / "kpca_fisher_vs_k.csv")
+                       if p.exists()], ignore_index=True)
+    seeds = RESULTS / "analysis" / "fisher_vs_k_seeds.csv"
+    if seeds.exists():
+        s = pd.read_csv(seeds).groupby(["proj", "k"]).fisher_heldout.agg(
+            fisher_heldout="mean", fisher_heldout_std="std", n_seeds="count").reset_index()
+        seed0 = seed0.drop(columns=["fisher_heldout"]).merge(s, on=["proj", "k"], how="right")
+    return records(seed0)
+
+
 def confusions(path: Path) -> dict | None:
     if not path.exists():
         return None
@@ -186,10 +244,19 @@ def main() -> None:
 
     an, base = RESULTS / "analysis", RESULTS / "baseline"
     pair_fisher = read_csv(an / "pair_fisher.csv")
+    grid, grid_seeds = model_grid()
+    print(f"model grid: {'seed 0' if grid_seeds == 1 else f'mean of {grid_seeds} seeds'}")
+    separability = read_csv(base / "separability.csv")
+    sep_ms = multiseed("baseline", "separability")
+    if separability and sep_ms is not None and sep_ms.n_seeds.min() >= 2:
+        held = dict(zip(sep_ms.front, sep_ms.fisher_heldout_mean))
+        for r in separability:                   # held-out J over seeds; in-sample J stays seed 0
+            r["fisher_heldout"] = held.get(r["front"], r["fisher_heldout"])
     bundle = dict(
         meta=dict(classes=CLASSES, class_names=CLASS_NAMES, fs=FS, window=WINDOW, step=STEP,
                   n_windows=len(meta), n_features=int(F.shape[1]), n_recordings=len(recs),
-                  seed=args.seed, bpfo_order=BPFO_ORDER, bpfi_order=BPFI_ORDER,
+                  seed=args.seed, grid_seeds=grid_seeds, bpfo_order=BPFO_ORDER,
+                  bpfi_order=BPFI_ORDER,
                   generated=dt.date.today().isoformat(),
                   citation=json.loads((ROOT / "data" / "raw" / "SOURCE.json").read_text())),
         recordings=rec_rows,
@@ -197,12 +264,11 @@ def main() -> None:
         spectra=spectra,
         peaks=read_csv(an / "peaks.csv"),
         embedding=emb,
-        metrics=read_csv(base / "metrics.csv"),
+        metrics=grid,
         per_class=read_csv(base / "per_class.csv"),
         confusion=confusions(base / "confusion.npz"),
-        separability=read_csv(base / "separability.csv"),
-        fisher_vs_k=(read_csv(base / "fisher_vs_k.csv") or [])
-        + (read_csv(an / "kpca_fisher_vs_k.csv") or []),
+        separability=separability,
+        fisher_vs_k=fisher_curves(),
         pairs=read_csv(an / "pair_separability.csv"),
         pair_top=top_per_group(pair_fisher, ["class_a", "class_b"], "j_heldout", 5),
         class_vs_rest=top_per_group(read_csv(an / "class_vs_rest.csv"), "cls", "j_min", 6),
@@ -215,8 +281,11 @@ def main() -> None:
                  confusion=confusions(RESULTS / "dtw" / "confusion.npz")),
         tuning=dict(summary=read_csv(RESULTS / "tuning" / "summary.csv"),
                     folds=read_csv(RESULTS / "tuning" / "nested_folds.csv")),
-        corruption={c: read_csv(RESULTS / f"corruption_{c}" / "metrics.csv")
-                    for c in ("both", "test")},
+        corruption={c: records(multiseed(f"corruption_{c}", "metrics")) for c in ("both", "test")},
+        ood=dict(metrics=records(multiseed("ood", "metrics")),
+                 per_class=records(multiseed("ood", "per_class"))),
+        sa=dict(metrics=records(multiseed("subspace_alignment", "metrics")),
+                fisher=records(multiseed("subspace_alignment", "fisher"))),
     )
     missing = [k for k, v in bundle.items() if v is None]
     if missing:

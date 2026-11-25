@@ -147,6 +147,8 @@ export function Validation() {
   const ms = d.metrics.filter((m) => m.split === split);
   const best = ms.reduce((a, b) => (b.macro_f1 > a.macro_f1 ? b : a));
   const lo = Math.min(...ms.map((m) => m.macro_f1));
+  const gbest = d.metrics.filter((m) => m.split === "grouped").reduce((a, b) => (b.macro_f1 > a.macro_f1 ? b : a));
+  const seeds = (d.meta.grid_seeds > 1 ? `mean of ${d.meta.grid_seeds} seeds` : "seed 0");
   const text: Record<Split, string> = {
     naive: "Windows are shuffled at random. Every recording lands in both train and test, and neighbouring windows share half their samples, so a model can simply recognise the recording. Near-perfect, and meaningless.",
     grouped: "Each fold holds out one whole recording per class, so the test recordings are never seen in training. This is the protocol behind every number on this page.",
@@ -157,8 +159,8 @@ export function Validation() {
     <Section id="validation" eyebrow="Validation" tags={["protocol"]}
       title="The 1.00 that isn't: why recordings are held out whole"
       lede={<>Overlapping windows from one recording are almost copies of each other. A random split therefore leaks, and every
-        model looks perfect. Holding out <b>whole recordings</b> is the honest test, and it puts the best model at 0.49 macro-F1
-        against a chance level of 0.17.</>}>
+        model looks perfect. Holding out <b>whole recordings</b> is the honest test, and it puts the best model at{" "}
+        {gbest.macro_f1.toFixed(2)} macro-F1 ({seeds}) against a chance level of 0.17.</>}>
       <div className="card" style={{ marginBottom: 18 }}>
         <h3>Cutting a recording into windows</h3>
         <Windowing />
@@ -185,7 +187,7 @@ export function Validation() {
           <div style={{ fontSize: 64, fontWeight: 760, letterSpacing: "-0.04em", lineHeight: 1.05, margin: "6px 0 2px" }}>
             <Counter value={best.macro_f1} />
           </div>
-          <p className="sub">{FRONT_LABEL[best.front]} + {CLF_LABEL[best.clf]} · all 30 models range {lo.toFixed(2)}–{best.macro_f1.toFixed(2)}</p>
+          <p className="sub">{FRONT_LABEL[best.front]} + {CLF_LABEL[best.clf]} · {seeds} · all 30 models range {lo.toFixed(2)}–{best.macro_f1.toFixed(2)}</p>
           <ScoreStrips split={split} />
           <TableView cols={["split", "front-end", "classifier", "macro-F1", "± std"]}
             rows={d.metrics.map((m) => [m.split, FRONT_LABEL[m.front], CLF_LABEL[m.clf], m.macro_f1, m.macro_f1_std])} />

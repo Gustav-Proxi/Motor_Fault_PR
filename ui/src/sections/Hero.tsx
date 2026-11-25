@@ -5,12 +5,105 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { CLASSES, prettyId, recId, type Cls } from "../lib/data";
-import { useData, useInView, useReducedMotion } from "../lib/hooks";
+import { CLF_LABEL, FRONT_LABEL } from "../lib/data";
+import { useData, useFrame, useInView, useReducedMotion } from "../lib/hooks";
+import { hasWebGL } from "../lib/webgl";
+import { GLBoundary } from "../components/GLBoundary";
 import { useTheme } from "../lib/theme";
 import { ClassMark, Seg, Stat } from "../components/ui";
 
 /** Shared playback state the 3D scene reads every frame (no React re-render per sample). */
 interface Player { chans: Float32Array[]; pos: number; gain: number; f1: number; accent: string; ink: string; bg: string; cls: string }
+
+/** Phone screen: live 3-axis trace of the last 2.5 s, painted on a 512 x 256 canvas. */
+function paintScreen(g: CanvasRenderingContext2D, p: Player, i: number) {
+  const n = p.chans[0].length;
+  g.fillStyle = p.bg;
+  g.fillRect(0, 0, 512, 256);
+  g.strokeStyle = "rgba(255,255,255,0.07)";
+  g.lineWidth = 1;
+  for (let y = 32; y < 256; y += 48) { g.beginPath(); g.moveTo(0, y); g.lineTo(512, y); g.stroke(); }
+  const span = 250;
+  for (let c = 0; c < 3; c++) {
+    const yc = 70 + c * 62;
+    g.strokeStyle = c === 0 ? p.accent : c === 1 ? p.ink : "rgba(200,200,200,0.55)";
+    g.lineWidth = 2.2;
+    g.beginPath();
+    for (let k = 0; k < span; k++) {
+      const s = p.chans[c][(i - span + k + n) % n];
+      const x = (k / (span - 1)) * 512;
+      const y = yc - s * p.gain * 900;
+      k ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.stroke();
+  }
+  g.fillStyle = p.ink;
+  g.font = "600 22px ui-monospace, Menlo, monospace";
+  g.fillText(`${p.cls}  ·  100 Hz`, 16, 30);
+  g.fillStyle = p.accent;
+  g.beginPath();
+  g.arc(490, 22, 7, 0, Math.PI * 2);
+  g.fill();
+}
+
+/** 2-D stand-in for the 3-D motor when WebGL is unavailable: same recording, same shake. */
+function MotorFallback({ player, active }: { player: React.MutableRefObject<Player>; active: boolean }) {
+  const { t } = useTheme();
+  const body = useRef<SVGGElement>(null);
+  const mark = useRef<SVGCircleElement>(null);
+  const screen = useRef<HTMLCanvasElement>(null);
+  const angle = useRef(0);
+  useFrame((dt) => {
+    const p = player.current;
+    const n = p.chans[0].length;
+    p.pos = (p.pos + dt * 100) % n;
+    const i = Math.floor(p.pos);
+    const k = p.gain * 170; // 3-D units -> SVG px
+    body.current?.setAttribute("transform", `translate(${(p.chans[0][i] * k).toFixed(2)} ${(-p.chans[2][i] * k).toFixed(2)})`);
+    angle.current += dt * 2 * Math.PI * (p.f1 / 24);
+    const a = angle.current;
+    if (mark.current) {
+      mark.current.setAttribute("cy", (222 + 30 * Math.sin(a)).toFixed(1));
+      mark.current.setAttribute("cx", (548 + 7 * Math.cos(a)).toFixed(1));
+      mark.current.setAttribute("opacity", Math.cos(a) > 0 ? "1" : "0.25");
+    }
+    const c = screen.current;
+    if (c) paintScreen(c.getContext("2d")!, p, i);
+  }, active);
+  const metal = t.mode === "dark" ? "#6b7889" : "#8793a3";
+  const dark = t.mode === "dark" ? "#3a424d" : "#4b5562";
+  return (
+    <div style={{ position: "absolute", inset: 0, background: t.mode === "dark" ? "#0e0f12" : "#e9e9e5" }}>
+      <svg viewBox="0 0 640 400" width="100%" height="100%" role="img" aria-label="Motor vibrating with the selected recording (2-D view)">
+        <defs>
+          <linearGradient id="hf-metal" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor={metal} /><stop offset="0.55" stopColor={dark} /><stop offset="1" stopColor="#20262e" />
+          </linearGradient>
+        </defs>
+        <ellipse cx="300" cy="332" rx="230" ry="16" fill="#000" opacity="0.25" />
+        <rect x="110" y="304" width="400" height="14" rx="3" fill="#16191d" />
+        <g ref={body}>
+          <rect x="170" y="262" width="60" height="44" rx="4" fill={dark} />
+          <rect x="370" y="262" width="60" height="44" rx="4" fill={dark} />
+          <rect x="100" y="160" width="52" height="112" rx="18" fill={dark} />
+          {Array.from({ length: 4 }, (_, j) => <line key={j} x1={108 + j * 11} x2={108 + j * 11} y1="172" y2="260" stroke="#b9c0c8" strokeWidth="2" opacity="0.5" />)}
+          <rect x="140" y="150" width="320" height="130" rx="26" fill="url(#hf-metal)" />
+          {Array.from({ length: 21 }, (_, j) => <line key={j} x1={160 + j * 14} x2={160 + j * 14} y1="156" y2="274" stroke="#20262e" strokeWidth="3" opacity="0.55" />)}
+          <rect x="455" y="166" width="24" height="98" rx="8" fill={dark} />
+          <rect x="190" y="134" width="180" height="16" rx="6" fill="#0d0f12" />
+          <rect x="196" y="137" width="168" height="6" rx="3" fill={t.accent} opacity="0.7" />
+        </g>
+        <rect x="479" y="214" width="62" height="16" rx="3" fill="#b9c0c8" />
+        <ellipse cx="548" cy="222" rx="11" ry="36" fill={dark} />
+        <circle ref={mark} cx="555" cy="222" r="4.5" fill={t.accent} />
+      </svg>
+      <canvas ref={screen} width={512} height={256}
+        style={{ position: "absolute", right: 18, top: 18, width: "38%", borderRadius: 12, border: "4px solid #0d0f12", boxShadow: "0 8px 30px rgba(0,0,0,.35)" }}
+        aria-label="Phone screen: live trace" />
+      <span className="pill" style={{ position: "absolute", left: 14, top: 14, font: "12px var(--mono)", color: "var(--ink2)" }}>2-D view (WebGL unavailable)</span>
+    </div>
+  );
+}
 
 function Controls() {
   const { camera, gl, size } = useThree();
@@ -67,34 +160,7 @@ function Motor({ player }: { player: React.MutableRefObject<Player> }) {
     // stroboscopic shaft: true speed / 24 so the rotation can be followed by eye
     if (shaft.current) shaft.current.rotation.x -= dt * 2 * Math.PI * (p.f1 / 24);
 
-    // phone screen: live 3-axis trace of the last 2.5 s
-    const g = screenCanvas.getContext("2d")!;
-    g.fillStyle = p.bg;
-    g.fillRect(0, 0, 512, 256);
-    g.strokeStyle = "rgba(255,255,255,0.07)";
-    g.lineWidth = 1;
-    for (let y = 32; y < 256; y += 48) { g.beginPath(); g.moveTo(0, y); g.lineTo(512, y); g.stroke(); }
-    const span = 250;
-    for (let c = 0; c < 3; c++) {
-      const yc = 70 + c * 62;
-      g.strokeStyle = c === 0 ? p.accent : c === 1 ? p.ink : "rgba(200,200,200,0.55)";
-      g.lineWidth = 2.2;
-      g.beginPath();
-      for (let k = 0; k < span; k++) {
-        const s = p.chans[c][(i - span + k + n) % n];
-        const x = (k / (span - 1)) * 512;
-        const y = yc - s * p.gain * 900;
-        k ? g.lineTo(x, y) : g.moveTo(x, y);
-      }
-      g.stroke();
-    }
-    g.fillStyle = p.ink;
-    g.font = "600 22px ui-monospace, Menlo, monospace";
-    g.fillText(`${p.cls}  ·  100 Hz`, 16, 30);
-    g.fillStyle = p.accent;
-    g.beginPath();
-    g.arc(490, 22, 7, 0, Math.PI * 2);
-    g.fill();
+    paintScreen(screenCanvas.getContext("2d")!, p, i);
     screenTex.needsUpdate = true;
   });
 
@@ -232,6 +298,8 @@ export function Hero() {
           </motion.div>
           <motion.div ref={ref} className="hero-canvas card" style={{ padding: 0 }}
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1.1, delay: 0.15 }}>
+            {hasWebGL() ? (
+            <GLBoundary fallback={<MotorFallback player={player} active={inView && !reduced} />}>
             <Canvas
               frameloop={inView && !reduced ? "always" : "demand"}
               resize={{ offsetSize: true }}
@@ -252,6 +320,8 @@ export function Hero() {
               <Floor color={t.mode === "dark" ? "#8f8d86" : "#52514e"} />
               <Controls />
             </Canvas>
+            </GLBoundary>
+            ) : <MotorFallback player={player} active={inView && !reduced} />}
             <div className="hud">
               <span className="pill">{prettyId(id)} · {d.meta.class_names[cls]}</span>
               <span className="pill">f1 = {rec.f1.toFixed(2)} Hz · slip {(rec.slip * 100).toFixed(1)}% · shaft strobe ÷24</span>
@@ -262,7 +332,8 @@ export function Hero() {
           <Stat label="Recordings" value={d.meta.n_recordings} note="6 classes × 3 speeds × 2 loads" />
           <Stat label="Labelled windows" value={d.meta.n_windows} note="10.24 s each, 50% overlap" />
           <Stat label="Hand-written features" value={d.meta.n_features} note="21 per channel × 6" />
-          <Stat label="Best macro-F1, unseen recordings" value={best.macro_f1} digits={2} note="LDA-5 + random forest · chance 0.17" />
+          <Stat label="Best macro-F1, unseen recordings" value={best.macro_f1} digits={2}
+            note={`${FRONT_LABEL[best.front]} + ${CLF_LABEL[best.clf]} · ${d.meta.grid_seeds > 1 ? `mean of ${d.meta.grid_seeds} seeds` : "seed 0"} · chance 0.17`} />
           <Stat label="Naive random split" value={naive} digits={2} note="leaks overlapping windows" />
         </div>
       </div>

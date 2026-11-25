@@ -51,14 +51,14 @@ python -m pytest                                 # tests
 
 ## Interactive UI
 
-`ui/` is a single-page site that walks through the project. It covers the motor and its fault signatures, all 36 recordings with live spectra, aliasing, the validation protocol, a 3-D view of the PCA / LDA / Kernel PCA feature spaces, separability, the model grid, corruptions, DTW and tuning. It reads one data bundle exported from the results above:
+`ui/` is a single-page site that walks through the project. It covers the motor and its fault signatures, all 36 recordings with live spectra, aliasing, the validation protocol, a 3-D view of the PCA / LDA / Kernel PCA feature spaces, separability, the model grid, corruptions, unseen speeds and loads with Subspace Alignment, DTW and tuning. It reads one data bundle exported from the results above:
 
 ```bash
 python scripts/export_ui_data.py       # needs the feature cache and results/ (one core, a few seconds)
 cd ui && npm install && npm run dev    # http://localhost:5173
 ```
 
-`npm run build` writes a static site to `ui/dist/` (`npm run preview` serves it). The k-NN, corruption, DTW and spectrum demos run in the browser on the exported windows, and animations pause when they are off screen. The bundle includes the corruption-sweep curves once `run_corruption.py` results exist.
+`npm run build` writes a static site to `ui/dist/` (`npm run preview` serves it). The k-NN, corruption, DTW and spectrum demos run in the browser on the exported windows, and animations pause when they are off screen. The model grid, corruption sweeps, OOD splits and Subspace Alignment are shown as mean ± std over every seed the export finds (the per-seed result folders, or a copied `results/multiseed/`); a table with one seed is labelled "seed 0". Without WebGL the two 3-D views fall back to 2-D canvases (force it with `?webgl=0`).
 
 ## Layout
 

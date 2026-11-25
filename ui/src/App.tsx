@@ -12,13 +12,14 @@ import { FeatureSpace } from "./sections/FeatureSpace";
 import { Separability } from "./sections/Separability";
 import { Models } from "./sections/Models";
 import { Robustness } from "./sections/Robustness";
+import { Domain } from "./sections/Domain";
 import { Dtw } from "./sections/Dtw";
 import { Kpca } from "./sections/Kpca";
 import { Findings } from "./sections/Findings";
 
 const NAV: [string, string][] = [
   ["anatomy", "Machine"], ["explorer", "Signals"], ["aliasing", "Aliasing"], ["validation", "Validation"],
-  ["space", "Feature space"], ["separability", "Separability"], ["models", "Models"], ["robustness", "Robustness"],
+  ["space", "Feature space"], ["separability", "Separability"], ["models", "Models"], ["robustness", "Robustness"], ["domain", "New conditions"],
   ["dtw", "DTW"], ["kpca", "Kernel PCA"], ["findings", "Findings"],
 ];
 
@@ -121,6 +122,7 @@ export function App() {
         <Separability />
         <Models />
         <Robustness />
+        <Domain />
         <Dtw />
         <Kpca />
         <Findings />

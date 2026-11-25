@@ -21,10 +21,14 @@ python scripts/download_data.py        # 36 CSVs (~190 MB) -> data/raw/
 python scripts/run_baseline.py                   # clean grid -> results/baseline/
 python scripts/run_corruption.py --corrupt both  # train + test corrupted -> results/corruption_both/
 python scripts/run_corruption.py --corrupt test  # train clean, test corrupted -> results/corruption_test/
+python scripts/run_analysis.py                   # separability analysis (2a-2c) -> results/analysis/
+python scripts/run_dtw.py                        # DTW k-NN baseline -> results/dtw/
+python scripts/run_tuning.py                     # nested grouped tuning -> results/tuning/
+python scripts/make_report_figures.py            # report figures + tables -> report/figures, report/tables
 python -m pytest                                 # tests
 ```
 
-`run_baseline.py` caches features at `data/processed/features_clean.parquet`; delete it after changing feature or windowing code. Each results folder gets a `runlog.json` with seed, parameters, library versions and dataset version.
+`run_baseline.py` caches features at `data/processed/features_clean.parquet`; delete it after changing feature or windowing code. The last four scripts read that cache, so run `run_baseline.py` first. `make_report_figures.py` also reads the CSVs the three scripts before it write, so keep that order. `run_dtw.py` and `run_tuning.py` use one or two CPU cores and save partial results, so an interrupted run resumes where it stopped. Each results folder gets a `runlog.json` with seed, parameters, library versions and dataset version.
 
 ## Layout
 
@@ -35,7 +39,12 @@ python -m pytest                                 # tests
 | `src/motorpr/corruption.py` | Noise, dropout and gain drift on raw recordings |
 | `src/motorpr/projections.py` | Hand-written PCA, LDA (Ledoit–Wolf) and Mahalanobis whitening |
 | `src/motorpr/evaluation.py` | Recording-grouped CV, model grid, metrics, separability |
+| `src/motorpr/kernel_pca.py` | Hand-written RBF Kernel PCA front-end (`kpca5`) |
+| `src/motorpr/analysis.py` | Held-out pair Fisher scores, rotor-bar sideband and aliasing checks |
+| `src/motorpr/dtw.py` | Window envelopes and DTW k-NN |
+| `src/motorpr/tuning.py` | Nested recording-grouped hyperparameter tuning |
 | `scripts/` | Download and experiment entry points |
+| `report/` | Report figures, tables and section sources |
 | `tests/` | Unit tests on synthetic signals |
 
 ## Validation

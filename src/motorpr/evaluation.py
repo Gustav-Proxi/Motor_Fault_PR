@@ -19,6 +19,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
 from .data import CLASSES
+from .kernel_pca import KernelPCA
 from .projections import LDA, PCA, Whitener
 
 N_FOLDS = 6
@@ -62,13 +63,17 @@ def recording_folds(meta: pd.DataFrame, mode: str = "grouped", seed: int = 0
 
 # ---------------------------------------------------------------- model grid
 
-def front_ends(pca_k: int | float = 0.95) -> dict[str, list]:
-    """Projection steps placed after standardisation."""
+def front_ends(pca_k: int | float = 0.95, seed: int = 0) -> dict[str, list]:
+    """Projection steps placed after standardisation.
+
+    seed only affects kpca5 (which training windows its kernel is built on).
+    """
     return {
         "raw": [],
         f"pca{pca_k}": [("proj", PCA(pca_k))],
         "pca5": [("proj", PCA(5))],
         "lda5": [("proj", LDA(5))],
+        "kpca5": [("proj", KernelPCA(5, random_state=seed))],
     }
 
 

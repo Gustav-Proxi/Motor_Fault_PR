@@ -15,7 +15,7 @@ The two tracks touch different files, so both can run at the same time without m
 - [x] **3b.** Subspace Alignment across supply frequencies.
 - [x] **R1.** Report: methods, validation and robustness sections.
 - [ ] **P1.** Fresh-clone reproducibility run of the full pipeline from the README; fix whatever breaks.
-- [ ] **R6.** Report: `main.tex` assembling all sections, abstract and conclusion.
+- [x] **R6.** Report: `main.tex` assembling all sections, abstract and conclusion.
 - [ ] **S1.** Presentation slides (shared deck).
 
 ## Sanika — analysis, DTW and extensions (items 2, 4, 5)

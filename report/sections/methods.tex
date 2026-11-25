@@ -1,0 +1,52 @@
+% R1: methods (Vaishak). Pipeline in src/motorpr/ (data.py, features.py, projections.py,
+% kernel_pca.py, evaluation.py). Needs: amsmath, booktabs.
+
+\section{Data and Methods}\label{sec:methods}
+
+\textbf{Data.} We use the smartphone vibration dataset of Ertarğın et al.\
+\cite{ertargin2026}: an iPhone 15 Pro Max lies on a squirrel-cage induction motor and logs
+six inertial channels at 100\,Hz, the raw accelerations $g_X, g_Y, g_Z$ and the
+gravity-compensated user accelerations $g^{u}_X, g^{u}_Y, g^{u}_Z$. There are six health states:
+healthy (H), insufficient lubrication (B1), severely insufficient lubrication (B2), a cracked
+outer bearing ring (B3), supply-voltage imbalance (V) and a broken rotor bar (R). Each class is
+recorded once at each of six operating conditions (supply frequency 30, 40 or 50\,Hz, unloaded
+or loaded), giving 36 recordings of about 15 minutes each. The 100\,Hz rate puts the Nyquist
+frequency at 50\,Hz, below the textbook signatures of B3 (outer-race defect frequency
+44--86\,Hz) and V (twice line frequency, 60--100\,Hz).
+
+\textbf{Windows.} Each recording is cut into windows of 1{,}024 samples (10.24\,s) with a
+512-sample step, giving 6{,}264 windows (about 174 per recording). The mean of each window is
+removed per channel, which removes gravity and sensor offset; amplitudes are not normalised,
+because absolute vibration energy is discriminative, and all scaling is fitted inside the
+cross-validation folds.
+
+\textbf{Features.} Each window yields 21 hand-written features per channel, 126 in total.
+Eight are time-domain statistics: RMS, variance, skewness, kurtosis, crest factor,
+peak-to-peak, shape factor and impulse factor. Thirteen are spectral. The shaft speed $f_1$ is
+estimated per window as the strongest peak between 0.80 and 1.03 times the synchronous speed
+(half the supply frequency, for a four-pole motor); measured $f_1$ is about 15, 20 and 25\,Hz
+unloaded and 4--8\% lower under load, so a fixed nominal speed would misplace every
+speed-relative feature. On a full-window Hann periodogram (0.098\,Hz bins) we compute the
+energy fractions at $f_1$ and $2f_1$ ($\pm$0.3\,Hz), a sideband fraction 0.5--3\,Hz either
+side of $f_1$, and band powers below $0.5f_1$, around $f_1$, around $2f_1$ and above $2.5f_1$.
+On a Welch estimate (256-sample segments) we compute the spectral centroid, spread and entropy,
+and from a short-time Fourier transform (64-sample segments) the maximum and mean of the
+spectral kurtosis. The slip $1 - f_1/f_\mathrm{sync}$ is the
+last feature.
+
+\textbf{Projections.} After standardisation, each pipeline applies one of five front-ends:
+none (the 126 raw features), PCA keeping 95\% of the variance, PCA to five dimensions, Fisher
+LDA to five dimensions (at most $C-1$ for six classes), or RBF Kernel PCA to five dimensions.
+PCA is the eigendecomposition of the sample covariance. LDA solves the generalised
+eigenproblem $S_B v = \lambda S_W v$ with the within-class scatter shrunk towards a scaled
+identity by the Ledoit--Wolf estimate \cite{ledoit2004}, which keeps $S_W$ invertible when
+features are nearly constant within a recording. Kernel PCA \cite{scholkopf1998} centres the RBF
+kernel in feature space and keeps its top five eigenvectors; the kernel is built on at most
+1{,}500 randomly chosen training windows, and every window is projected against that set. All
+three projections are implemented by hand.
+
+\textbf{Classifiers.} Each front-end feeds six classifiers: $k$-NN with Euclidean distance
+($k=5$), $k$-NN after whitening (equivalent to Mahalanobis distance), a linear SVM ($C=1$), an
+RBF SVM ($C=10$), a random forest of 300 trees, and Gaussian naive Bayes. This gives 30 models.
+The scaler, the projection and the classifier form one pipeline, fitted on the training fold
+only.

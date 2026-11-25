@@ -13,7 +13,7 @@ The two tracks touch different files, so both can run at the same time without m
 - [x] **1c.** Rerun the baseline and both sweeps over ~5 seeds; report mean ± std.
 - [x] **3a.** Cross-speed split (train 30 + 50 Hz, test 40 Hz) and cross-load split (train unloaded, test loaded).
 - [x] **3b.** Subspace Alignment across supply frequencies.
-- [ ] **R1.** Report: methods, validation and robustness sections.
+- [x] **R1.** Report: methods, validation and robustness sections.
 - [ ] **P1.** Fresh-clone reproducibility run of the full pipeline from the README; fix whatever breaks.
 - [ ] **R6.** Report: `main.tex` assembling all sections, abstract and conclusion.
 - [ ] **S1.** Presentation slides (shared deck).

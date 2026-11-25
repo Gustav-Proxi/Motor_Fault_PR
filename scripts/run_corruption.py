@@ -46,6 +46,19 @@ def features_for(recs: list[Recording], mode: str, level: float, seed: int
     return meta, extract_features(W, meta["supply_hz"].to_numpy()).to_numpy()
 
 
+def evaluate(fronts: dict, clfs: dict, X: np.ndarray, y: np.ndarray,
+             folds: list[tuple[np.ndarray, np.ndarray]]) -> list[dict]:
+    """Every front-end x classifier on one feature matrix."""
+    rows = []
+    for fname, front in fronts.items():
+        sep = projected_separability(front, X, y, folds)
+        for cname, clf in clfs.items():
+            r = run_cv(make_pipeline(front, clf), X, y, folds)
+            rows.append(dict(front=fname, clf=cname, acc=r["acc"], macro_f1=r["macro_f1"],
+                             fisher_heldout=sep["fisher_heldout"]))
+    return rows
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--corrupt", choices=("both", "test"), default="both")
@@ -64,25 +77,24 @@ def main() -> None:
     fronts, clfs = front_ends(), classifiers(args.seed)
 
     rows = []
+    clean = None  # corrupt() is the identity at level 0, so every mode shares one clean run
     for mode in args.modes:
         for level in args.levels:
             t0 = time.time()
-            _, X_cor = features_for(recs, mode, level, args.seed)
-            if args.corrupt == "both":
-                X, cv_folds = X_cor, folds
+            if level == 0:
+                if clean is None:
+                    clean = evaluate(fronts, clfs, X_clean, y, folds)
+                res = clean
+            elif args.corrupt == "both":
+                _, X_cor = features_for(recs, mode, level, args.seed)
+                res = evaluate(fronts, clfs, X_cor, y, folds)
             else:
+                _, X_cor = features_for(recs, mode, level, args.seed)
                 # stack clean (train) and corrupted (test) copies; fold indices point into each half
-                X = np.vstack([X_clean, X_cor])
                 n = len(X_clean)
-                cv_folds = [(tr, te + n) for tr, te in folds]
-            yy = np.concatenate([y, y]) if args.corrupt == "test" else y
-            for fname, front in fronts.items():
-                sep = projected_separability(front, X, yy, cv_folds)
-                for cname, clf in clfs.items():
-                    r = run_cv(make_pipeline(front, clf), X, yy, cv_folds)
-                    rows.append(dict(mode=mode, level=level, front=fname, clf=cname,
-                                     acc=r["acc"], macro_f1=r["macro_f1"],
-                                     fisher_heldout=sep["fisher_heldout"]))
+                res = evaluate(fronts, clfs, np.vstack([X_clean, X_cor]), np.concatenate([y, y]),
+                               [(tr, te + n) for tr, te in folds])
+            rows += [dict(mode=mode, level=level, **r) for r in res]
             best = max((r for r in rows if r["mode"] == mode and r["level"] == level),
                        key=lambda r: r["macro_f1"])
             print(f"{mode:8s} {level:.1f}  best F1 {best['macro_f1']:.3f} "

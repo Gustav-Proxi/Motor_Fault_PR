@@ -17,28 +17,42 @@ function FisherVsK({ col }: { col: "fisher_heldout" | "fisher_train" }) {
   const projs = ["pca", "lda", "kpca"];
   const names: Record<string, string> = { pca: "PCA", lda: "LDA", kpca: "Kernel PCA" };
   const rows = d.fisher_vs_k;
+  const band = col === "fisher_heldout" && rows.some((r) => r.fisher_heldout_std != null);
   const vals = rows.map((r) => r[col] as number);
-  const x = scaleLinear().domain([1, 5]).range([46, w - 92]);
+  const right = 112;                                   // room for "Kernel PCA 12.0" end labels
+  const x = scaleLinear().domain([1, 5]).range([46, w - right]);
   const y = col === "fisher_train"
     ? scaleLog().domain([0.1, Math.max(...vals) * 1.3]).range([h - 30, 14])
     : scaleLinear().domain([0, Math.max(...vals) * 1.1]).range([h - 30, 14]).nice();
+  const ends = projs
+    .map((p, i) => {
+      const s = rows.filter((r) => r.proj === p).sort((a, b) => a.k - b.k);
+      return s.length ? { i, p, v: s[s.length - 1][col] as number, y: y(Math.max(0.1, s[s.length - 1][col])) + 4 } : null;
+    })
+    .filter((e): e is { i: number; p: string; v: number; y: number } => e !== null)
+    .sort((a, b) => a.y - b.y);
+  for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + 13);   // keep end labels apart
   return (
     <div ref={ref}>
       <svg width={w} height={h} className="chart" role="img" aria-label="Fisher J against the number of projected dimensions">
-        <AxisY scale={y} x={46} x2={w - 92} ticks={col === "fisher_train" ? 4 : 5} format={(v) => (v >= 1 ? `${+v.toFixed(0)}` : `${v}`)} label={col === "fisher_train" ? "J in-sample (log)" : "J held-out"} />
+        <AxisY scale={y} x={46} x2={w - right} ticks={col === "fisher_train" ? 4 : 5} format={(v) => (v >= 1 ? `${+v.toFixed(0)}` : `${v}`)} label={col === "fisher_train" ? "J in-sample (log, seed 0)" : band ? `J held-out (mean ± std, ${rows[0].n_seeds} seeds)` : "J held-out (seed 0)"} />
         {projs.map((p, i) => {
           const s = rows.filter((r) => r.proj === p).sort((a, b) => a.k - b.k);
           if (!s.length) return null;
           const path = s.map((r, k) => `${k ? "L" : "M"}${x(r.k)} ${y(Math.max(0.1, r[col]))}`).join("");
-          const last = s[s.length - 1];
+          const area = band
+            ? s.map((r, k) => `${k ? "L" : "M"}${x(r.k)} ${y(r.fisher_heldout + r.fisher_heldout_std)}`).join("") +
+              [...s].reverse().map((r) => `L${x(r.k)} ${y(Math.max(0, r.fisher_heldout - r.fisher_heldout_std))}`).join("") + "Z"
+            : null;
           return (
             <g key={p}>
+              {area && <path d={area} fill={t.series[i]} opacity={0.12} />}
               <motion.path d={path} fill="none" stroke={t.series[i]} strokeWidth={2} {...DRAW} viewport={{ once: true }} transition={{ duration: 1.1, delay: i * 0.15 }} />
               {s.map((r) => <circle key={r.k} cx={x(r.k)} cy={y(Math.max(0.1, r[col]))} r={4} fill={t.series[i]} stroke={t.surface} strokeWidth={2} />)}
-              <text x={x(5) + 10} y={y(Math.max(0.1, last[col])) + 4 + (p === "lda" && col === "fisher_heldout" ? -7 : p === "pca" && col === "fisher_heldout" ? 7 : 0)} className="lbl">{names[p]} {last[col].toFixed(1)}</text>
             </g>
           );
         })}
+        {ends.map((e) => <text key={e.p} x={x(5) + 10} y={e.y} className="lbl">{names[e.p]} {e.v.toFixed(1)}</text>)}
         <AxisX scale={x} y={h - 30} ticks={5} format={(v) => `${v}`} label="projected dimensions k" />
       </svg>
     </div>
@@ -57,7 +71,7 @@ function KernelWidth() {
       <svg width={w} height={h} className="chart" role="img" aria-label="RBF kernel similarity against distance for three kernel widths">
         <AxisY scale={y} x={40} x2={w - 16} ticks={4} label="kernel value k(x, x′)" />
         <rect x={x(13)} width={x(19) - x(13)} y={12} height={h - 42} fill={t.accent} opacity={0.1} />
-        <text x={x(16)} y={26} textAnchor="middle" className="lbl">typical pair ≈ 16</text>
+        {w >= 520 && <text x={x(16)} y={26} textAnchor="middle" className="lbl">typical pair ≈ 16</text>}{/* subtitle says it on phones */}
         {gammas.map(([g, lab], i) => {
           let p = "";
           for (let dd = 0; dd <= 30; dd += 0.25) p += `${dd ? "L" : "M"}${x(dd)} ${y(Math.exp(-g * dd * dd))}`;
@@ -80,6 +94,10 @@ function gainText(tuned: number, def: number) {
   const g = Math.round((Math.round(tuned * 100) - Math.round(def * 100))) / 100;
   return g === 0 ? "0.00" : `${g > 0 ? "+" : "−"}${Math.abs(g).toFixed(2)}`;
 }
+
+// Row labels on phone-width screens, where the full names do not fit.
+const SHORT_FRONT: Record<string, string> = { raw: "Raw", "pca0.95": "PCA-95%", pca5: "PCA-5", lda5: "LDA-5", kpca5: "KPCA-5" };
+const SHORT_CLF: Record<string, string> = { knn_euc: "k-NN", knn_mah: "k-NN Mah.", svm_lin: "Lin. SVM", svm_rbf: "RBF SVM", rf: "RF", gnb: "GNB" };
 
 function Dumbbell() {
   const d = useData();
@@ -110,7 +128,9 @@ function Dumbbell() {
             <g key={r.front + r.clf} className="row-in" style={{ animationDelay: `${i * 30}ms` }}
               onPointerEnter={() => setHover({ x: x(r.f1_tuned), y, r })} onPointerLeave={() => setHover(null)}>
               <rect x={0} y={y - rh / 2} width={w} height={rh} fill="transparent" />
-              <text x={L - 10} y={y + 4} textAnchor="end" className="lbl">{FRONT_LABEL[r.front]} · {CLF_LABEL[r.clf]}</text>
+              <text x={L - 10} y={y + 4} textAnchor="end" className="lbl">
+                {w < 520 ? `${SHORT_FRONT[r.front] ?? r.front} · ${SHORT_CLF[r.clf] ?? r.clf}` : `${FRONT_LABEL[r.front]} · ${CLF_LABEL[r.clf]}`}
+              </text>
               <line x1={x(r.f1_default)} x2={x(r.f1_tuned)} y1={y} y2={y} stroke={t.series[0]} strokeWidth={2} opacity={0.6} />
               <circle cx={x(r.f1_default)} cy={y} r={4.5} fill={t.surface} stroke={t.ink2} strokeWidth={2} />
               <circle cx={x(r.f1_tuned)} cy={y} r={5} fill={t.series[0]} stroke={t.surface} strokeWidth={2} />
@@ -148,7 +168,7 @@ export function Kpca() {
             <Seg value={col} onChange={setCol} options={[{ value: "fisher_heldout", label: "Held-out" }, { value: "fisher_train", label: "In-sample" }]} />
           </div>
           <FisherVsK col={col} />
-          <p className="sub" style={{ color: "var(--ink2)" }}>Held-out, Kernel PCA tracks linear PCA up to k = 4 and falls behind at k = 5. In-sample, LDA looks hundreds of times better, an illusion that disappears on unseen recordings.</p>
+          <p className="sub" style={{ color: "var(--ink2)" }}>Held-out, Kernel PCA keeps about as much separability as linear PCA, and LDA is ahead of both. Yet Kernel PCA classifies worst. In-sample, LDA looks hundreds of times better, an illusion that disappears on unseen recordings.</p>
         </div>
         <div className="card">
           <h3>Why a wider kernel wins</h3>
@@ -159,7 +179,7 @@ export function Kpca() {
       </div>
       <div className="card" style={{ marginTop: 18 }}>
         <h3>Nested grouped tuning: default ○ → tuned ●</h3>
-        <p className="sub">Inner 5-fold grouped grid search inside each of the 6 outer folds; both columns train on every second window. Hover a row for the selected setting.</p>
+        <p className="sub">Inner 5-fold grouped grid search inside each of the 6 outer folds; both columns train on every second window (seed 0). Hover a row for the selected setting.</p>
         <Dumbbell />
         <p className="sub" style={{ color: "var(--ink2)" }}>On raw and LDA-5 features the gain lies between −0.03 and +0.04, inside the fold-to-fold spread of 0.10–0.17. The largest gain is Kernel PCA-5 with an RBF SVM (0.22 → 0.35), and even tuned, Kernel PCA stays below the linear front-ends.</p>
         <TableView cols={["front-end", "classifier", "default", "tuned", "most chosen", "folds"]}

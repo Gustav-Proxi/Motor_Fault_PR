@@ -68,6 +68,8 @@ interface RawBundle {
     n_features: number;
     n_recordings: number;
     seed: number;
+    /** seeds averaged in `metrics` (1 = seed 0 only, std over folds; >1 = std over seeds) */
+    grid_seeds: number;
     bpfo_order: number;
     bpfi_order: number;
     generated: string;
@@ -101,7 +103,12 @@ interface RawBundle {
   regions: Row[];
   dtw: { summary: Row[]; folds: Row[]; confusion: Record<string, number[][]> | null };
   tuning: { summary: Row[]; folds: Row[] };
+  /** rows: mode, level, front, clf, macro_f1_mean, macro_f1_std, n_seeds */
   corruption: { both: Row[] | null; test: Row[] | null };
+  /** rows: split (cross_speed | cross_load), front, clf, macro_f1_mean/_std, n_seeds */
+  ood: { metrics: Row[] | null; per_class: Row[] | null };
+  /** rows: target (speed30/40/50, load1), k, method (none | zscore | sa), clf, macro_f1_mean/_std */
+  sa: { metrics: Row[] | null; fisher: Row[] | null };
 }
 
 export interface AppData extends Omit<RawBundle, "signals" | "spectra" | "embedding"> {

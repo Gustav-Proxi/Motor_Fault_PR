@@ -49,28 +49,40 @@ function Wave({ clean, dirty, missing }: { clean: Float32Array; dirty: Float32Ar
 }
 
 function SweepCurves({ rows, mode }: { rows: Record<string, any>[]; mode: Mode }) {
+  // best classifier per front-end at each level (mean over seeds, band = that model's std)
   const { t } = useTheme();
   const [ref, w] = useWidth<HTMLDivElement>(360);
-  const h = 220;
-  const fronts = ["raw", "pca5", "lda5", "kpca5"].filter((f) => rows.some((r) => r.front === f));
+  const h = 236;
+  const fronts = ["raw", "pca0.95", "pca5", "lda5", "kpca5"].filter((f) => rows.some((r) => r.front === f));
   const levels = [...new Set(rows.filter((r) => r.mode === mode).map((r) => r.level as number))].sort((a, b) => a - b);
-  const x = scaleLinear().domain([0, Math.max(0.5, ...levels)]).range([40, w - 60]);
-  const y = scaleLinear().domain([0, 1]).range([h - 30, 12]);
-  const series = fronts.map((f) => levels.map((l) => Math.max(...rows.filter((r) => r.mode === mode && r.front === f && r.level === l).map((r) => r.macro_f1))));
-  const colors = [t.series[0], t.series[1], t.series[2], t.cls.B3];
+  const x = scaleLinear().domain([0, Math.max(0.5, ...levels)]).range([40, w - 74]);
+  const y = scaleLinear().domain([0, 0.6]).range([h - 30, 12]);
+  const series = fronts.map((f) => levels.map((l) => {
+    const cand = rows.filter((r) => r.mode === mode && r.front === f && r.level === l);
+    const b = cand.reduce((a, c) => (c.macro_f1_mean > a.macro_f1_mean ? c : a), cand[0]);
+    return { m: b.macro_f1_mean as number, s: (b.macro_f1_std as number | null) ?? 0 };
+  }));
+  const colors = [t.cls.H, t.cls.B1, t.cls.B2, t.cls.B3, t.cls.V];
+  const ends = series.map((s, i) => ({ i, y: y(s[s.length - 1].m) })).sort((a, b) => a.y - b.y);
+  for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + 11);   // keep end labels apart
   return (
     <div ref={ref}>
       <svg width={w} height={h} className="chart" role="img" aria-label={`Best macro-F1 per front-end under ${mode}`}>
-        <AxisY scale={y} x={40} x2={w - 60} ticks={4} label="macro-F1" />
-        <line x1={40} x2={w - 60} y1={y(1 / 6)} y2={y(1 / 6)} stroke={t.muted} />
+        <AxisY scale={y} x={40} x2={w - 74} ticks={3} />
+        <line x1={40} x2={w - 74} y1={y(1 / 6)} y2={y(1 / 6)} stroke={t.muted} />
         {series.map((s, i) => (
           <g key={fronts[i]}>
-            <path d={s.map((v, k) => `${k ? "L" : "M"}${x(levels[k])} ${y(v)}`).join("")} fill="none" stroke={colors[i]} strokeWidth={2} />
-            {s.map((v, k) => <circle key={k} cx={x(levels[k])} cy={y(v)} r={4} fill={colors[i]} stroke={t.surface} strokeWidth={2} />)}
-            <text x={x(levels[levels.length - 1]) + 8} y={y(s[s.length - 1]) + 4} className="lbl">{FRONT_LABEL[fronts[i]]}</text>
+            {s.some((p) => p.s > 0) && (
+              <path d={s.map((p, k) => `${k ? "L" : "M"}${x(levels[k])} ${y(p.m + p.s)}`).join("") +
+                [...s].reverse().map((p, k) => `L${x(levels[s.length - 1 - k])} ${y(p.m - p.s)}`).join("") + "Z"}
+                fill={colors[i]} opacity={0.1} />
+            )}
+            <path d={s.map((p, k) => `${k ? "L" : "M"}${x(levels[k])} ${y(p.m)}`).join("")} fill="none" stroke={colors[i]} strokeWidth={2} />
+            {s.map((p, k) => <circle key={k} cx={x(levels[k])} cy={y(p.m)} r={3.5} fill={colors[i]} stroke={t.surface} strokeWidth={1.5} />)}
           </g>
         ))}
-        <AxisX scale={x} y={h - 30} ticks={5} label={`${mode} level`} />
+        {ends.map(({ i, y: yy }) => <text key={i} x={x(levels[levels.length - 1]) + 8} y={yy + 4} className="lbl">{FRONT_LABEL[fronts[i]]}</text>)}
+        <AxisX scale={x} y={h - 30} ticks={2} label={`${mode} level`} />
       </svg>
     </div>
   );
@@ -147,21 +159,22 @@ export function Robustness() {
             </div>
             {sweep ? (
               <>
-                <p className="sub">Best classifier per front-end, grouped CV. Horizontal line: chance.</p>
+                <p className="sub">Best classifier per front-end, grouped CV, {(sweep[0]?.n_seeds ?? 1) > 1 ? `mean ± std over ${sweep[0].n_seeds} seeds` : "seed 0"}. Horizontal line: chance.</p>
                 <div className="grid3">
-                  {(["noise", "dropout", "gain"] as Mode[]).map((m) => <div key={m}><span className="ctl-label">{m}</span><SweepCurves rows={sweep} mode={m} /></div>)}
+                  {(["noise", "dropout", "gain"] as Mode[]).map((m) => <div key={m}><span className="ctl-label">{m} · macro-F1</span><SweepCurves rows={sweep} mode={m} /></div>)}
                 </div>
-                <TableView cols={["mode", "level", "front-end", "classifier", "macro-F1"]} rows={sweep.map((r) => [r.mode, r.level, r.front, r.clf, r.macro_f1])} />
+                <TableView cols={["mode", "level", "front-end", "classifier", "macro-F1", "± std"]} rows={sweep.map((r) => [r.mode, r.level, FRONT_LABEL[r.front], r.clf, r.macro_f1_mean, r.macro_f1_std ?? 0])} />
               </>
             ) : (
               <div className="callout">
-                <b>The sweep results aren't in this bundle.</b> They come from <span className="mono">scripts/run_corruption.py --corrupt {which}</span>{" "}
-                (tasks 1a–1c, multi-seed). Run it, then <span className="mono">scripts/export_ui_data.py</span>, and the curves appear here.
+                <b>The sweep curves aren't in this bundle.</b> They come from <span className="mono">scripts/run_corruption.py --corrupt {which} --seed s</span>{" "}
+                over five seeds, which takes about an hour on a 16-core node. Copy the cluster run's <span className="mono">results/multiseed/</span>{" "}
+                into <span className="mono">results/</span> (or run the sweeps), then <span className="mono">scripts/export_ui_data.py</span>.
                 <div style={{ marginTop: 8, color: "var(--ink2)" }}>
-                  Preliminary single-seed findings (ROADMAP, 2026-10-10):{" "}
+                  The report's result (5 seeds):{" "}
                   {which === "both"
-                    ? "with train and test both corrupted, noise and dropout barely matter even at 50%. Gain drift hurts, and LDA most of all."
-                    : "with clean training and corrupted test data, 10% noise or dropout already drops LDA to about 0.2, and at 50% it falls below chance. Gain drift barely matters, and raw features degrade least."}
+                    ? "with training and test data corrupted alike, noise and dropout barely matter even at 50%. Gain drift hurts, and LDA most of all (0.45 → 0.35 at level 0.5)."
+                    : "with clean training data, 10% noise or dropout already drops every projected front-end to 0.17–0.26 and Kernel PCA to 0.06–0.17. Gain drift barely matters, and the raw features degrade least."}
                 </div>
               </div>
             )}

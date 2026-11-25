@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { CLF_LABEL, FRONT_LABEL } from "../lib/data";
 import { useData } from "../lib/hooks";
 import { Section } from "../components/ui";
 
@@ -10,9 +11,10 @@ export function Findings() {
   const lda = d.separability.find((s) => s.front === "lda5")!;
   const dtw1 = d.dtw.summary?.find((r) => r.distance === "dtw" && r.k === 1);
   const now1 = d.dtw.summary?.find((r) => r.distance === "nowarp" && r.k === 1);
+  const seeds = (d.meta.grid_seeds > 1 ? `mean of ${d.meta.grid_seeds} seeds` : "seed 0");
   const b1 = d.pairs.filter((p) => p.class_a === "B1" || p.class_b === "B1").map((p) => p.j_heldout);
   const cards = [
-    { big: `${naive.toFixed(2)} → ${best.macro_f1.toFixed(2)}`, h: "Leakage is the first result", p: "A random split over overlapping windows scores near-perfect. Holding out whole recordings, the best model (LDA-5 + random forest) reaches 0.49 macro-F1, about three times chance." },
+    { big: `${naive.toFixed(2)} → ${best.macro_f1.toFixed(2)}`, h: "Leakage is the first result", p: `A random split over overlapping windows scores near-perfect. Holding out whole recordings, the best model (${FRONT_LABEL[best.front]} + ${CLF_LABEL[best.clf]}) reaches ${best.macro_f1.toFixed(2)} macro-F1 (${seeds}), about three times chance.` },
     { big: `${Math.round(lda.fisher_train)} → ${lda.fisher_heldout.toFixed(0)}`, h: "LDA learns the recording", p: "LDA's Fisher J on its own training fold is huge. On unseen recordings it falls to the level of PCA. Most of what it separates is recording identity." },
     { big: `J ${Math.min(...b1).toFixed(1)}–${Math.max(...b1).toFixed(1)}`, h: "Lubrication loss survives", p: "B1 separates from all five other classes on held-out recordings, through impulsiveness (kurtosis, peak-to-peak, impulse factor), with no defect frequency needed." },
     { big: "f1 + f_p = alias(3f1)", h: "Rotor bars hide in the fold", p: "At 50 Hz supply the rotor-bar sidebands coincide exactly with aliased running-speed harmonics, and R's sidebands are never the strongest at their condition. That is the R–B2 confusion." },
@@ -22,8 +24,9 @@ export function Findings() {
   return (
     <Section id="findings" eyebrow="What we found" tags={["summary"]}
       title="The boundary, not the accuracy"
-      lede={<>A 100 Hz sensor keeps some fault structure and erases the rest. These are the results that carry the report. All are
-        single-seed (seed 0) until the multi-seed rerun lands.</>}>
+      lede={<>A 100 Hz sensor keeps some fault structure and erases the rest. These are the results that carry the report. Model comparisons
+        are {d.meta.grid_seeds > 1 ? `means over ${d.meta.grid_seeds} seeds` : "from seed 0 (the 5-seed means are in the report)"};
+        the separability analysis, DTW and tuning use seed 0.</>}>
       <div className="grid3">
         {cards.map((c, i) => (
           <motion.div key={c.h} className="card finding" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}

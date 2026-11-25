@@ -8,9 +8,12 @@ import { macroF1, nearest, vote } from "../lib/dsp";
 import { fmt, useData, useInView, useReducedMotion, useWidth } from "../lib/hooks";
 import { CLASS_SHAPE, useTheme } from "../lib/theme";
 import { ClassLegend, ClassMark, Counter, HBar, Section, Seg } from "../components/ui";
+import { GLBoundary } from "../components/GLBoundary";
+import { Scatter2D, type View as ViewMode } from "../components/Scatter2D";
+import { hasWebGL } from "../lib/webgl";
 
 const PROJ_LABEL: Record<Proj, string> = { pca5: "PCA-5", lda5: "LDA-5", kpca5: "Kernel PCA-5" };
-type View = "all" | "test" | "testonly";
+type View = ViewMode;
 
 const vert = /* glsl */ `
 attribute vec3 aColor; attribute float aShape; attribute float aSize; attribute float aAlpha; attribute float aFlag;
@@ -311,6 +314,12 @@ export function FeatureSpace() {
     return { rec, win: d.emb.win[probe], truth: CLASSES[d.emb.label[probe]], pred: CLASSES[pred], test: d.emb.recFold[probe] === fold };
   })();
   const baseline = d.metrics.find((m) => m.split === "grouped" && m.front === proj && m.clf === "knn_euc")!;
+  const gl = hasWebGL();
+  const onHover = (i: number | null, x: number, y: number) => setHover((p) => (i === null ? null : p && p.i === i ? p : { i, x, y }));
+  const flat = (
+    <Scatter2D target={target} fold={fold} view={view} visible={visible} flags={knn?.flags ?? null} probe={probe} nbrs={nbrs}
+      height={520} onPick={setProbe} onHover={onHover} />
+  );
 
   return (
     <Section id="space" eyebrow="Feature space" tags={["5a", "projections"]}
@@ -327,19 +336,23 @@ export function FeatureSpace() {
           </div>
           <div className="controls" style={{ padding: "0 16px" }}>
             <Seg value={view} onChange={setView} options={[{ value: "all", label: "All windows" }, { value: "test", label: "Highlight held-out" }, { value: "testonly", label: "Held-out only" }]} />
-            <button className="btn ghost" onClick={() => setAuto(!auto)}>{auto ? "Stop rotation" : "Rotate"}</button>
+            {gl && <button className="btn ghost" onClick={() => setAuto(!auto)}>{auto ? "Stop rotation" : "Rotate"}</button>}
           </div>
           <div ref={ref} style={{ height: 520, position: "relative", cursor: hover ? "pointer" : "grab" }}>
+            {gl ? (
+            <GLBoundary fallback={flat}>
             <Canvas frameloop={inView ? "always" : "demand"} resize={{ offsetSize: true }} dpr={[1, 1.6]} camera={{ position: [4.4, 2.9, 4.8], fov: 42 }}
               raycaster={{ params: { Points: { threshold: 0.07 } } } as never} gl={{ antialias: true, powerPreference: "low-power" }}
               onPointerMissed={() => setProbe(null)} aria-label={`3-D scatter of windows projected by ${PROJ_LABEL[proj]}, fold ${fold + 1}`}>
               <color attach="background" args={[t.mode === "dark" ? "#0e0f12" : "#f6f6f3"]} />
               <Axes color={t.muted} />
               <Points target={target} fold={fold} view={view} visible={visible} flags={knn?.flags ?? null} probe={probe}
-                onPick={setProbe} onHover={(i, x, y) => setHover((p) => (i === null ? null : p && p.i === i ? p : { i, x, y }))} />
+                onPick={setProbe} onHover={onHover} />
               {probe !== null && nbrs.length > 0 && <Links target={target} probe={probe} nbrs={nbrs} />}
               <Rig auto={auto && !reduced} />
             </Canvas>
+            </GLBoundary>
+            ) : flat}
             {hover && (
               <div className="tip" style={{ left: Math.min(hover.x + 14, 9999), top: hover.y + 10 }}>
                 <b style={{ display: "flex", gap: 6, alignItems: "center" }}><ClassMark c={CLASSES[d.emb.label[hover.i]]} />{prettyId(d.emb.recIds[d.emb.rec[hover.i]])}</b>
@@ -380,7 +393,10 @@ export function FeatureSpace() {
                   <span className="badge"><span style={{ color: t.bad }}>✗</span> {knn.done - knn.correct} wrong (ringed in the plot)</span>
                 </div>
                 <RecallBars recall={knn.recall} />
-                <p className="sub" style={{ marginTop: 6 }}>Baseline mean over all 6 folds for this model: {baseline.macro_f1.toFixed(2)} ± {baseline.macro_f1_std.toFixed(2)}.</p>
+                <p className="sub" style={{ marginTop: 6 }}>
+                  Baseline for this model, {d.meta.grid_seeds > 1 ? `mean of ${d.meta.grid_seeds} seeds × 6 folds` : "mean of 6 folds (seed 0)"}:{" "}
+                  {baseline.macro_f1.toFixed(2)} ± {baseline.macro_f1_std.toFixed(2)}. This view uses seed 0's folds.
+                </p>
               </>
             ) : <p className="sub">Each held-out window lights up as it is classified.</p>}
           </div>

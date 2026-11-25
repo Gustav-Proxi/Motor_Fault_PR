@@ -6,3 +6,12 @@ results/
 __pycache__/
 .pytest_cache/
 .DS_Store
+
+# LaTeX build files
+report/*.aux
+report/*.log
+report/*.bbl
+report/*.blg
+report/*.fls
+report/*.fdb_latexmk
+report/*.out

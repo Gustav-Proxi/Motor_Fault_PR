@@ -1,0 +1,58 @@
+% CSE 455/555 project report (R6: main file, abstract and conclusion by Vaishak).
+% Build from report/:  latexmk -pdf main.tex   (or pdflatex, bibtex, pdflatex, pdflatex)
+% Every number comes from results/ (5-seed run); see README.md to regenerate it.
+\documentclass[conference]{IEEEtran}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage[round]{natbib}
+\usepackage[hidelinks]{hyperref}
+% Author-year citations (APA-style reference list): \cite is parenthetical, \citet textual.
+\let\cite\citep
+
+\begin{document}
+
+\title{Bandwidth-Limited Pattern Recognition: Which Induction-Motor Fault Signatures
+Survive Consumer-Grade Vibration Sensing?}
+
+\author{\IEEEauthorblockN{Vaishak G Kumar and Sanika Vilas Najan}
+\IEEEauthorblockA{Department of Computer Science and Engineering, University at Buffalo}}
+
+\maketitle
+
+\begin{abstract}
+A smartphone resting on a motor samples vibration at 100\,Hz, so nothing above 50\,Hz
+survives, including the textbook signatures of a cracked bearing race and of voltage
+imbalance. We ask which of six motor health states remain separable under that truncation,
+using hand-written time- and frequency-domain features, hand-implemented PCA, LDA and Kernel
+PCA, and classical classifiers, on 36 recordings of a public smartphone dataset. Holding out
+whole recordings is essential: a random split over windows scores 1.00 macro-F1, while the
+best model on unseen recordings reaches $0.47 \pm 0.03$ over five seeds (chance 0.17). LDA's
+Fisher ratio falls from about 490 on its training fold to 15 on held-out recordings, because
+it mostly learns which recording a window came from. Lubrication loss survives the sensor,
+through impulsiveness rather than any defect frequency. The rotor-bar sidebands do not: at
+50\,Hz supply they coincide exactly with aliased running-speed harmonics. A model trained on a
+clean signal collapses under 10\% noise or sample dropout, and a change of load breaks every
+PCA front-end; most of what domain adaptation recovers comes from per-domain normalisation.
+The contribution is a map of which fault information a 100\,Hz sensor keeps, not a top
+accuracy.
+\end{abstract}
+
+\IfFileExists{sections/intro.tex}{\input{sections/intro.tex}}{}
+\IfFileExists{sections/related.tex}{\input{sections/related.tex}}{}
+\input{sections/methods.tex}
+\input{sections/validation.tex}
+\input{sections/separability.tex}
+\input{sections/robustness.tex}
+\input{sections/dtw.tex}
+\input{sections/kpca_tuning.tex}
+\input{sections/conclusion.tex}
+
+\IfFileExists{references.bib}{%
+  \bibliographystyle{apalike}
+  \bibliography{references}%
+}{}
+
+\end{document}

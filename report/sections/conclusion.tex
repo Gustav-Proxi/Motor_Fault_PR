@@ -1,0 +1,41 @@
+% R6: conclusion (Vaishak). Summarises Sections III-VIII; no new numbers.
+
+\section{Conclusion}\label{sec:conclusion}
+
+We asked which induction-motor fault signatures survive a 100\,Hz smartphone sensor, and
+measured it on recordings the models had never seen. The answer is a boundary rather than an
+accuracy:
+\begin{itemize}
+  \item \textbf{Survives.} Lubrication loss (B1) separates from every other class through
+        impulsiveness (kurtosis, peak-to-peak, impulse factor), with no defect frequency needed,
+        and it survives a change of load.
+  \item \textbf{Hidden by the sensor.} The rotor-bar sidebands of R fall outside the band our
+        sideband feature integrates and, at 50\,Hz supply, coincide exactly with aliased
+        running-speed harmonics for any slip. R's one consistent cue is its slip under load,
+        which a model trained only on unloaded data cannot use.
+  \item \textbf{Above Nyquist.} The defining frequencies of B3 and V lie above 50\,Hz; what
+        separates them weakly is waveform asymmetry, slip and aliased mechanical harmonics, not
+        their own signatures.
+\end{itemize}
+
+Several negative results are findings in their own right. A random split over windows reports
+near-perfect accuracy that disappears when whole recordings are held out. LDA's large in-sample
+separability is mostly recording identity. A single seed made LDA with a random forest look
+best; averaged over five seeds, a linear SVM on the raw features is. Kernel PCA, elastic
+alignment (DTW) and nested hyperparameter tuning do not move the result, and most of the gain
+from Subspace Alignment comes from normalising each operating condition separately.
+
+\textbf{Limitations.} Each class is recorded once per operating condition on one motor and one
+phone, so recording-to-recording variation within a class is barely sampled: this, rather than
+model capacity, limits accuracy. The bearing defect frequencies assume a 6204-type bearing
+because the dataset does not name it. Subspace Alignment and per-domain z-scoring use unlabelled
+windows from the new condition.
+
+\textbf{Future work.} Several recordings per class and condition, more than one motor and phone,
+and a sensor sampling above 200\,Hz would show whether the boundary is a property of the faults
+or of this setup.
+
+\textbf{Reproducibility.} The full pipeline re-runs from the raw data with the commands in the
+repository README: download the 36 recordings, extract features, run every experiment over five
+seeds, aggregate, and regenerate every table and figure in this report. Each results folder
+records its seed, parameters, library versions and the dataset version.

@@ -1,0 +1,66 @@
+% R1: validation (Vaishak). Numbers from scripts/aggregate_seeds.py over 5 seeds (one CCR
+% run); tables from scripts/make_methods_tables.py. Needs: booktabs, graphicx.
+
+\section{Validation Protocol}\label{sec:validation}
+
+Windows that overlap by half and come from the same 15-minute recording are almost copies of
+each other. A random split over windows therefore puts near-duplicates of every test window in
+the training set. We compare three splits:
+\begin{itemize}
+  \item \textbf{Naive}: six stratified folds over windows. It leaks, and is reported only to
+        measure that leakage.
+  \item \textbf{Grouped}: each class's six recordings are dealt one per fold, so every test fold
+        holds one whole, unseen recording per class. This is our main protocol.
+  \item \textbf{Leave one condition out}: fold $k$ holds out every class's recording at
+        operating condition $k$.
+\end{itemize}
+Because each class is recorded once per condition, every grouped test recording is also from a
+condition that the training fold never saw for that class. Scores are macro-F1 averaged over the
+six folds; chance is $1/6 \approx 0.17$.
+
+\textbf{Seeds.} Fold-to-fold spread is large (up to $\pm$0.2 macro-F1), so a single fold
+assignment can make one model look best by luck. Every experiment is repeated over five seeds.
+A seed changes the grouped fold assignment, the random-forest seed, the Kernel PCA subsample and
+the corruption noise. We report the mean and standard deviation over seeds, all from one run on
+one machine.
+
+\textbf{Separability on held-out recordings.} A grouped test fold has a single recording per
+class, so the usual Fisher ratio or silhouette computed on it measures how distinct six
+individual recordings are, not how well the classes generalise. We therefore score held-out
+separability with a transfer Fisher ratio: the between-class scatter comes from the training
+class means, and the within-class scatter is the spread of held-out windows around those same
+training means, Ledoit--Wolf shrunk. Fisher $J$ is compared only between spaces of equal
+dimension.
+
+\begin{table}[t]
+  \centering
+  \caption{Best model under each split (macro-F1, mean $\pm$ std over 5 seeds). The
+  leave-one-condition-out folds do not depend on the seed.}
+  \label{tab:splits}
+  \input{tables/tab_splits.tex}
+\end{table}
+
+\begin{table*}[t]
+  \centering
+  \caption{Grouped cross-validation: macro-F1 of every front-end and classifier (mean
+  $\pm$ std over 5 seeds; chance 0.17). Bold: best.}
+  \label{tab:grid}
+  \input{tables/tab_grid.tex}
+\end{table*}
+
+\textbf{Results.} The leakage is the first result (Table~\ref{tab:splits}). Every model scores
+about 1.00 under the naive split and at most 0.47 when whole recordings are held out. Leaving one
+condition out scores higher than the grouped split (0.56), probably because all six classes
+are then tested on the same unseen condition, which preserves their differences relative to
+each other.
+
+Across the grid (Table~\ref{tab:grid}) the best model is the linear SVM on the raw features
+($0.47 \pm 0.03$). LDA-5 is uniformly decent with every classifier (0.42--0.45) but is not ahead
+once seeds are averaged. With a single seed, LDA-5 with a random forest reached 0.49, which is
+the kind of luck the seed average removes. LDA's in-sample Fisher $J$ at $k=5$ is about 490,
+while its held-out $J$ is $15.1 \pm 4.7$, close to PCA-5 ($10.1 \pm 3.5$): most of what LDA
+separates on its training fold is which recording a window came from. Kernel PCA-5 is the
+weakest front-end ($0.28 \pm 0.05$ at best).
+
+Per class, B1 is recognised almost perfectly (recall $0.95 \pm 0.03$ for the best model),
+while B3 (0.31), R (0.41) and B2 (0.43) remain hard. Section~\ref{sec:separability} explains why.

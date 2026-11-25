@@ -1,0 +1,14 @@
+\begin{tabular}{lcccc}
+\toprule
+ & \multicolumn{2}{c}{Cross-speed (test 40\,Hz)} & \multicolumn{2}{c}{Cross-load (test loaded)} \\
+Front-end & macro-F1 & classifier & macro-F1 & classifier \\
+\midrule
+Raw 126-D & 0.66 $\pm$ 0.02 & RF & 0.41 $\pm$ 0.02 & RF \\
+PCA (95\% var.) & 0.54 $\pm$ 0.03 & RF & 0.15 $\pm$ 0.00 & Lin.\ SVM \\
+PCA-5 & 0.52 $\pm$ 0.01 & RF & 0.14 $\pm$ 0.00 & Lin.\ SVM \\
+LDA-5 & 0.60 $\pm$ 0.00 & $k$-NN & 0.39 $\pm$ 0.06 & RF \\
+Kernel PCA-5 & 0.32 $\pm$ 0.01 & RBF SVM & 0.05 $\pm$ 0.00 & GNB \\
+\midrule
+\multicolumn{5}{l}{Cross-load recall, Raw 126-D + RF: H 0.64, B1 0.92, B2 0.00, B3 0.26, V 0.68, R 0.16} \\
+\bottomrule
+\end{tabular}

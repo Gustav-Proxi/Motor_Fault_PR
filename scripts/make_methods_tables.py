@@ -64,9 +64,13 @@ def tab_splits(base: pd.DataFrame) -> None:
     for split, label in [("naive", "Naive (random windows)"),
                          ("condition", "Leave one condition out"),
                          ("grouped", "Grouped by recording")]:
-        r = base[base.split == split].sort_values("macro_f1_mean").iloc[-1]
-        lines.append(f"{label} & {FRONTS[r.front]} + {CLFS[r.clf]} & "
-                     f"{pm(r.macro_f1_mean, r.macro_f1_std)} \\\\")
+        d = base[base.split == split]
+        # stable order: ties (e.g. every model at 1.00 under the naive split) resolve the same way
+        r = d.sort_values(["macro_f1_mean", "front", "clf"], kind="mergesort").iloc[-1]
+        tied = int((d.macro_f1_mean >= r.macro_f1_mean - 0.005).sum())
+        model = (f"{tied} of {len(d)} models within 0.005" if tied > 1
+                 else f"{FRONTS[r.front]} + {CLFS[r.clf]}")
+        lines.append(f"{label} & {model} & {pm(r.macro_f1_mean, r.macro_f1_std)} \\\\")
     write("tab_splits.tex", lines + [r"\bottomrule", r"\end{tabular}"])
 
 

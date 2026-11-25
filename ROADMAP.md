@@ -1,5 +1,7 @@
 # Roadmap
 
+**Update 2026-11-25:** every item below is done. Final numbers are 5-seed means from one run (`results/multiseed/`); the report is `report/main.tex`, and `SPLIT.md` tracks who did what. The "Where we are" section is the original single-seed snapshot, kept for history; the report supersedes it.
+
 Status as of 2026-10-10. Report + code due **Nov 25, 2026**.
 
 ## Where we are
@@ -15,18 +17,18 @@ The base pipeline runs end to end (see `README.md`): 6,264 windows × 126 hand-w
 ## Next steps (in order)
 
 ### 1. Make the numbers trustworthy
-- [ ] Corruption sweep: compute the clean (level 0) case once instead of once per mode.
-- [ ] Run corruption levels in parallel; a full sweep should drop from ~30 min to ~5–8 min.
-- [ ] Rerun the baseline and both sweeps over ~5 seeds and report mean ± std. Fold-to-fold std is up to ±0.2, so differences below ~0.05 are noise until then.
+- [x] Corruption sweep: compute the clean (level 0) case once instead of once per mode.
+- [x] Run corruption levels in parallel; a full sweep should drop from ~30 min to ~5–8 min.
+- [x] Rerun the baseline and both sweeps over ~5 seeds and report mean ± std. Fold-to-fold std is up to ±0.2, so differences below ~0.05 are noise until then.
 
 ### 2. Explain the surprising results (core contribution: the Nyquist boundary)
-- [ ] Per-feature, per-class-pair Fisher scores: what makes B1 separable?
-- [ ] R vs B2 confusion: do the rotor-bar sideband features actually differ between R and the other classes?
-- [ ] B3 and V: does any separability come from aliased energy or from low-frequency secondary effects? Lead: the loaded 30 Hz recordings show strong 28/42 Hz peaks.
+- [x] Per-feature, per-class-pair Fisher scores: what makes B1 separable?
+- [x] R vs B2 confusion: do the rotor-bar sideband features actually differ between R and the other classes?
+- [x] B3 and V: does any separability come from aliased energy or from low-frequency secondary effects? Lead: the loaded 30 Hz recordings show strong 28/42 Hz peaks.
 
 ### 3. Address the condition confound
-- [ ] Explicit cross-speed split (train 30 + 50 Hz, test 40 Hz) and cross-load split (train unloaded, test loaded).
-- [ ] Subspace Alignment across supply frequencies.
+- [x] Explicit cross-speed split (train 30 + 50 Hz, test 40 Hz) and cross-load split (train unloaded, test loaded).
+- [x] Subspace Alignment across supply frequencies.
 
 ### 4. Decide on DTW (needs both of us)
 The proposal applies DTW to load- and speed-transition segments, but every recording is a steady 15-minute run with no transitions. Options:
@@ -34,8 +36,8 @@ The proposal applies DTW to load- and speed-transition segments, but every recor
 - (b) reuse it as a DTW k-NN baseline on window envelopes.
 
 ### 5. Remaining extensions
-- [ ] Kernel PCA (RBF) as a non-linear front-end.
-- [ ] Nested hyperparameter tuning; models currently use fixed defaults (k=5, C=10, 300 trees).
+- [x] Kernel PCA (RBF) as a non-linear front-end.
+- [x] Nested hyperparameter tuning; models currently use fixed defaults (k=5, C=10, 300 trees).
 
 ## Splitting the work
 
@@ -43,14 +45,14 @@ Agreed split, 2026-10-22, revised 2026-11-09 (proposed); full task list and git 
 
 ### Vaishak — infrastructure and robustness (items 1, 3)
 Branch `vaishak/<topic>`. Owns `scripts/run_baseline.py`, `scripts/run_corruption.py`, `src/motorpr/evaluation.py`, `src/motorpr/projections.py`, and new modules for the OOD splits and Subspace Alignment.
-- [ ] 1. Clean case computed once, parallel corruption levels, 5-seed reruns with mean ± std.
-- [ ] 3. Cross-speed and cross-load splits; Subspace Alignment.
+- [x] 1. Clean case computed once, parallel corruption levels, 5-seed reruns with mean ± std.
+- [x] 3. Cross-speed and cross-load splits; Subspace Alignment.
 
 ### Sanika — analysis and extensions (items 2, 4, 5)
 Branch `sanika/<topic>`. Owns a new `src/motorpr/analysis.py`, `scripts/run_analysis.py`, `notebooks/`, and `results/analysis/`. Uses the existing feature cache and `evaluation.py` read-only; if something there needs to change, ask Vaishak instead of editing it.
-- [ ] 2. Per-feature, per-class-pair Fisher scores; the R vs B2 sideband check; aliasing vs. low-frequency effects for B3 and V.
-- [ ] 4. Write up DTW options (a) and (b) with a recommendation, and prototype (b) if it is cheap. We decide together.
-- [ ] 5. Kernel PCA (RBF); nested hyperparameter tuning.
+- [x] 2. Per-feature, per-class-pair Fisher scores; the R vs B2 sideband check; aliasing vs. low-frequency effects for B3 and V.
+- [x] 4. Write up DTW options (a) and (b) with a recommendation, and prototype (b) if it is cheap. We decide together.
+- [x] 5. Kernel PCA (RBF); nested hyperparameter tuning.
 
 ### Hand-offs
 - Sanika's numbers are single-seed until item 1 lands; rerun them once the multi-seed harness is merged.

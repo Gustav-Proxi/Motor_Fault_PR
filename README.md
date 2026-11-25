@@ -42,6 +42,7 @@ python scripts/run_tuning.py                     # -> results/tuning/
 python scripts/make_report_figures.py            # separability, DTW, Kernel PCA, projection + confusion figures; tables
 python scripts/make_methods_tables.py            # model grid, splits, OOD, SA tables; corruption figure
 (cd report && latexmk -pdf main.tex)             # report/main.pdf
+(cd slides && latexmk -pdf slides.tex)          # slides/slides.pdf (Beamer; uses report/ figures)
 
 python scripts/export_ui_data.py                 # data bundle for the interactive UI -> ui/public/data/
 python -m pytest                                 # tests

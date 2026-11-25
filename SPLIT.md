@@ -9,7 +9,7 @@ The two tracks touch different files, so both can run at the same time without m
 **Owns:** `scripts/run_baseline.py`, `scripts/run_corruption.py`, `src/motorpr/evaluation.py`, `src/motorpr/projections.py`, `src/motorpr/corruption.py`, plus new modules for the OOD splits and Subspace Alignment.
 
 - [x] **1a.** Corruption sweep: compute the clean (level 0) case once, not once per mode.
-- [ ] **1b.** Run corruption levels in parallel (target: full sweep in ~5–8 min, down from ~30).
+- [x] **1b.** Run corruption levels in parallel (target: full sweep in ~5–8 min, down from ~30).
 - [ ] **1c.** Rerun the baseline and both sweeps over ~5 seeds; report mean ± std.
 - [ ] **3a.** Cross-speed split (train 30 + 50 Hz, test 40 Hz) and cross-load split (train unloaded, test loaded).
 - [ ] **3b.** Subspace Alignment across supply frequencies.

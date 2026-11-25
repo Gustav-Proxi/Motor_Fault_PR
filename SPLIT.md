@@ -37,7 +37,7 @@ Use the cached features (`data/processed/features_clean.parquet`, made by `run_b
 - [x] **R4.** Report: Kernel PCA and tuning results.
 - [x] **U1.** Interactive project UI (`ui/`, `scripts/export_ui_data.py`).
 - [ ] **U2.** UI: WebGL fallback, out-of-distribution and Subspace Alignment section, multi-seed sweep curves.
-- [ ] **R5.** Report: introduction, related work, references; R2–R4 updated to the final multi-seed run.
+- [x] **R5.** Report: introduction, related work, references; R2–R4 updated to the final multi-seed run.
 
 ## Shared
 

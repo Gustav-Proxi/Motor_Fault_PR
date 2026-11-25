@@ -1,51 +1,63 @@
-% R1: methods (Vaishak). Pipeline in src/motorpr/ (data.py, features.py, projections.py,
-% kernel_pca.py, evaluation.py). Needs: amsmath, booktabs.
+% Methodology (R1 by Vaishak, condensed to the 4-page format in R5). Pipeline in src/motorpr/
+% (features.py, projections.py, kernel_pca.py, evaluation.py, corruption.py, domain.py,
+% analysis.py, dtw.py, tuning.py).
 
-\section{Data and Methods}\label{sec:methods}
+\section{Methodology}\label{sec:methods}
 
-\textbf{Data.} We use the smartphone vibration dataset of \citet{ertargin2026}: an iPhone 15 Pro Max lies on a squirrel-cage induction motor and logs
-six inertial channels at 100\,Hz, the raw accelerations $g_X, g_Y, g_Z$ and the
-gravity-compensated user accelerations $g^{u}_X, g^{u}_Y, g^{u}_Z$. There are six health states:
-healthy (H), insufficient lubrication (B1), severely insufficient lubrication (B2), a cracked
-outer bearing ring (B3), supply-voltage imbalance (V) and a broken rotor bar (R). Each class is
-recorded once at each of six operating conditions (supply frequency 30, 40 or 50\,Hz, unloaded
-or loaded), giving 36 recordings of about 15 minutes each. The 100\,Hz rate puts the Nyquist
-frequency at 50\,Hz, below the textbook signatures of B3 (outer-race defect frequency
-44--86\,Hz) and V (twice line frequency, 60--100\,Hz).
+\textbf{Features.} Each window yields 21 hand-written features per channel, 126 in all. Eight
+are time-domain statistics: RMS, variance, skewness, kurtosis, crest factor, peak-to-peak, shape
+factor and impulse factor. Thirteen are spectral and are measured relative to the shaft speed
+$f_1$, estimated per window as the strongest periodogram peak between 0.80 and 1.03 times the
+synchronous speed (it drops 4--8\% under load): the energy fractions at $f_1$ and $2f_1$, a sideband fraction
+0.5--3\,Hz either side of $f_1$, four band powers (below $0.5f_1$, around $f_1$, around $2f_1$,
+above $2.5f_1$), the Welch \cite{welch1967} spectral centroid, spread and entropy, the maximum and
+mean spectral kurtosis \cite{antoni2006}, and the slip $1 - f_1/f_\mathrm{sync}$. There is no separate feature-selection step:
+the projections below reduce the dimension, and Sec.~\ref{sec:separability} analyses which
+features carry the separability.
 
-\textbf{Windows.} Each recording is cut into windows of 1{,}024 samples (10.24\,s) with a
-512-sample step, giving 6{,}264 windows (about 174 per recording). The mean of each window is
-removed per channel, which removes gravity and sensor offset; amplitudes are not normalised,
-because absolute vibration energy is discriminative, and all scaling is fitted inside the
-cross-validation folds.
+\textbf{Projections.} After standardisation, each pipeline applies one of five front-ends, all
+implemented by hand \cite{duda2001}: none (126-D), PCA keeping 95\% of the variance, PCA to five dimensions,
+Fisher LDA \cite{fisher1936} to five dimensions ($C-1$ for six classes), and RBF Kernel PCA to five dimensions.
+LDA solves $S_B v = \lambda S_W v$ with $S_W$ shrunk by the Ledoit--Wolf estimate
+\cite{ledoit2004}, since features that are nearly constant within a recording make it singular.
+Kernel PCA \cite{scholkopf1998} centres the kernel $\exp(-\gamma\lVert x-x'\rVert^2)$ with
+$\gamma = 1/126$, keeps its top five eigenvectors, and is fitted on at most 1{,}500 training
+windows.
 
-\textbf{Features.} Each window yields 21 hand-written features per channel, 126 in total.
-Eight are time-domain statistics: RMS, variance, skewness, kurtosis, crest factor,
-peak-to-peak, shape factor and impulse factor. Thirteen are spectral. The shaft speed $f_1$ is
-estimated per window as the strongest peak between 0.80 and 1.03 times the synchronous speed
-(half the supply frequency, for a four-pole motor); measured $f_1$ is about 15, 20 and 25\,Hz
-unloaded and 4--8\% lower under load, so a fixed nominal speed would misplace every
-speed-relative feature. On a full-window Hann periodogram (0.098\,Hz bins) we compute the
-energy fractions at $f_1$ and $2f_1$ ($\pm$0.3\,Hz), a sideband fraction 0.5--3\,Hz either
-side of $f_1$, and band powers below $0.5f_1$, around $f_1$, around $2f_1$ and above $2.5f_1$.
-On a Welch estimate (256-sample segments) we compute the spectral centroid, spread and entropy,
-and from a short-time Fourier transform (64-sample segments) the maximum and mean of the
-spectral kurtosis. The slip $1 - f_1/f_\mathrm{sync}$ is the
-last feature.
+\textbf{Classifiers and hyperparameters.} Each front-end feeds six scikit-learn \cite{pedregosa2011}
+classifiers: $k$-NN with $k=5$ (Euclidean, and Mahalanobis via Ledoit--Wolf whitening) and
+Gaussian naive Bayes \cite{duda2001}, a linear SVM ($C=1$) and an RBF SVM ($C=10$,
+$\gamma = 1/(d\,\mathrm{Var}(x))$) \cite{cortes1995}, and a random forest of 300 trees
+\cite{breiman2001}: 30 pipelines, each fitted on the training fold only. To check that these defaults do not
+limit accuracy, every classifier on the raw, LDA-5 and Kernel PCA-5 front-ends is also tuned by
+nested grouped cross-validation \cite{cawley2010}: five inner grouped folds inside each outer
+training fold search the neighbour count, $C$, the RBF width, the forest leaf size, the naive
+Bayes smoothing and the Kernel PCA $\gamma \in \{0.002, 1/126, 0.03\}$.
 
-\textbf{Projections.} After standardisation, each pipeline applies one of five front-ends:
-none (the 126 raw features), PCA keeping 95\% of the variance, PCA to five dimensions, Fisher
-LDA to five dimensions (at most $C-1$ for six classes), or RBF Kernel PCA to five dimensions.
-PCA is the eigendecomposition of the sample covariance. LDA solves the generalised
-eigenproblem $S_B v = \lambda S_W v$ with the within-class scatter shrunk towards a scaled
-identity by the Ledoit--Wolf estimate \cite{ledoit2004}, which keeps $S_W$ invertible when
-features are nearly constant within a recording. Kernel PCA \cite{scholkopf1998} centres the RBF
-kernel in feature space and keeps its top five eigenvectors; the kernel is built on at most
-1{,}500 randomly chosen training windows, and every window is projected against that set. All
-three projections are implemented by hand.
+\textbf{Validation.} We compare three splits. \emph{Naive}: stratified folds over windows; it
+leaks near-duplicate windows and only measures that leakage. \emph{Grouped} (main protocol):
+each class's six recordings are dealt one per fold, so every test fold holds one whole unseen
+recording per class. \emph{Leave one condition out}: fold $k$ holds out every class at operating
+condition $k$. Scores are macro-F1 over six folds (chance $1/6$). Fold-to-fold spread reaches
+$\pm0.2$, so every experiment is repeated over five seeds (fold assignment, forest seed, Kernel
+PCA subsample, corruption noise) and reported as mean $\pm$ std. Separability is scored on
+held-out recordings with a transfer Fisher ratio $J$ \cite{fisher1936, duda2001}: the between-class scatter comes from the
+training class means, the within-class scatter from held-out windows around those means.
 
-\textbf{Classifiers.} Each front-end feeds six classifiers: $k$-NN with Euclidean distance
-($k=5$), $k$-NN after whitening (equivalent to Mahalanobis distance), a linear SVM ($C=1$), an
-RBF SVM ($C=10$), a random forest of 300 trees, and Gaussian naive Bayes. This gives 30 models.
-The scaler, the projection and the classifier form one pipeline, fitted on the training fold
-only.
+\textbf{Robustness.} Three sensor failures are applied to each whole raw recording before
+windowing, at levels 0--0.5: additive white noise with variance equal to the level times the
+channel's vibration variance (0.5 is an SNR of 3\,dB); sample dropout in contiguous 5--50-sample
+gaps filled by linear interpolation, as in Bluetooth packet loss; and a per-axis gain that
+drifts linearly over the recording. Models are either trained and tested on corrupted data, or
+trained clean and tested corrupted. Two fixed splits
+isolate unseen conditions: train on 30 and 50\,Hz and test on 40\,Hz, and train unloaded and test
+loaded. There we compare Subspace Alignment \cite{fernando2013}, which aligns the source PCA
+basis to the target's using unlabelled target windows, with per-domain z-scoring alone and with
+no adaptation.
+
+\textbf{Analysis and DTW.} The separability analysis scores each feature for each of the 15
+class pairs with the transfer $J$, measures the rotor-bar sidebands at $f_1 \pm f_p$
+($f_p = 2sf_\mathrm{supply}$) on 0.012\,Hz whole-recording spectra, and splits window energy into
+regions relative to $f_1$, including aliased shaft and line harmonics. Dynamic time warping
+\cite{sakoe1978} is tested as a $k$-NN distance between window envelopes (log RMS of 16-sample
+frames, band $\pm 8$). These analyses and the tuning use seed~0.

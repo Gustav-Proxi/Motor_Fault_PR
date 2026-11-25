@@ -17,19 +17,37 @@ python scripts/download_data.py        # 36 CSVs (~190 MB) -> data/raw/
 
 ## Run
 
+Everything below regenerates every number, table and figure in the report from the raw data.
+
 ```bash
-python scripts/run_baseline.py                   # clean grid -> results/baseline/
-python scripts/run_corruption.py --corrupt both  # train + test corrupted -> results/corruption_both/
-python scripts/run_corruption.py --corrupt test  # train clean, test corrupted -> results/corruption_test/
-python scripts/run_analysis.py                   # separability analysis (2a-2c) -> results/analysis/
-python scripts/run_dtw.py                        # DTW k-NN baseline -> results/dtw/
-python scripts/run_tuning.py                     # nested grouped tuning -> results/tuning/
-python scripts/make_report_figures.py            # report figures + tables -> report/figures, report/tables
+# 1. features (cached) + the clean model grid, seed 0
+python scripts/run_baseline.py                   # -> results/baseline/
+
+# 2. every experiment over 5 seeds (seed 0 -> results/<name>/, seed k -> results/<name>_seed<k>/)
+for s in 0 1 2 3 4; do
+  [ $s -gt 0 ] && python scripts/run_baseline.py --seed $s
+  python scripts/run_corruption.py --corrupt both --seed $s   # train + test corrupted
+  python scripts/run_corruption.py --corrupt test --seed $s   # train clean, test corrupted
+  python scripts/run_ood.py --seed $s                         # cross-speed / cross-load splits
+  python scripts/run_sa.py --seed $s                          # Subspace Alignment vs controls
+done
+python scripts/aggregate_seeds.py                # mean ± std over seeds -> results/multiseed/
+
+# 3. separability analysis, DTW and nested tuning (seed 0)
+python scripts/run_analysis.py                   # -> results/analysis/
+python scripts/run_dtw.py                        # -> results/dtw/
+python scripts/run_tuning.py                     # -> results/tuning/
+
+# 4. report tables and figures, then the PDF
+python scripts/make_report_figures.py            # separability / DTW / Kernel PCA figures and tables
+python scripts/make_methods_tables.py            # model grid, splits, OOD, SA tables; corruption figure
+(cd report && latexmk -pdf main.tex)             # report/main.pdf
+
 python scripts/export_ui_data.py                 # data bundle for the interactive UI -> ui/public/data/
 python -m pytest                                 # tests
 ```
 
-`run_baseline.py` caches features at `data/processed/features_clean.parquet`; delete it after changing feature or windowing code. The last four scripts read that cache, so run `run_baseline.py` first. `make_report_figures.py` also reads the CSVs the three scripts before it write, so keep that order. `run_dtw.py` and `run_tuning.py` use one or two CPU cores and save partial results, so an interrupted run resumes where it stopped. Each results folder gets a `runlog.json` with seed, parameters, library versions and dataset version.
+`run_baseline.py` caches features at `data/processed/features_clean.parquet`; delete it after changing feature or windowing code. Run it once before anything else: every other script reads that cache (the corruption sweeps re-extract features from the corrupted signal). The corruption sweeps and `run_sa.py` run their cells in parallel (`--n-jobs`, default all cores); `run_dtw.py` and `run_tuning.py` use one or two cores and save partial results, so an interrupted run resumes where it stopped. A seed changes the grouped fold assignment, the random-forest seed, the Kernel PCA subsample and the corruption noise. Results can differ slightly between machines (near-ties in the tuning grid search can flip), so the report's numbers all come from one run. Each results folder gets a `runlog.json` with seed, parameters, library versions and dataset version. On a 16-core node the whole sequence takes about an hour; on a laptop, several hours.
 
 ## Interactive UI
 
@@ -55,6 +73,7 @@ cd ui && npm install && npm run dev    # http://localhost:5173
 | `src/motorpr/analysis.py` | Held-out pair Fisher scores, rotor-bar sideband and aliasing checks |
 | `src/motorpr/dtw.py` | Window envelopes and DTW k-NN |
 | `src/motorpr/tuning.py` | Nested recording-grouped hyperparameter tuning |
+| `src/motorpr/domain.py` | Subspace Alignment and per-domain z-scoring for unseen operating conditions |
 | `scripts/` | Download and experiment entry points |
 | `report/` | Report figures, tables and section sources |
 | `ui/` | Interactive project site (React, Three.js); data from `scripts/export_ui_data.py` |

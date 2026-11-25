@@ -14,7 +14,7 @@ The two tracks touch different files, so both can run at the same time without m
 - [x] **3a.** Cross-speed split (train 30 + 50 Hz, test 40 Hz) and cross-load split (train unloaded, test loaded).
 - [x] **3b.** Subspace Alignment across supply frequencies.
 - [x] **R1.** Report: methods, validation and robustness sections.
-- [ ] **P1.** Fresh-clone reproducibility run of the full pipeline from the README; fix whatever breaks.
+- [x] **P1.** Fresh-clone reproducibility run of the full pipeline from the README; fix whatever breaks.
 - [x] **R6.** Report: `main.tex` assembling all sections, abstract and conclusion.
 - [ ] **S1.** Presentation slides (shared deck).
 

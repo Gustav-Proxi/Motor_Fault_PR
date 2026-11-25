@@ -48,8 +48,10 @@ dimension.
   \input{tables/tab_grid.tex}
 \end{table*}
 
-\textbf{Results.} The leakage is the first result (Table~\ref{tab:splits}). Every model scores
-about 1.00 under the naive split and at most 0.47 when whole recordings are held out. Leaving one
+\textbf{Results.} The leakage is the first result (Table~\ref{tab:splits}). Under the naive split
+26 of the 30 models score 0.99 or higher (the exceptions, 0.64--0.89, are Gaussian naive
+Bayes and the linear SVM on the five-dimensional PCA and Kernel PCA spaces), while no model scores above 0.47 when whole
+recordings are held out. Leaving one
 condition out scores higher than the grouped split (0.56), probably because all six classes
 are then tested on the same unseen condition, which preserves their differences relative to
 each other.

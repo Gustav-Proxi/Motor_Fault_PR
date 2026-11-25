@@ -45,3 +45,19 @@ Use DTW as a *distance* for a k-NN classifier, applied to a short sequence deriv
 A result where DTW ties `band = 0` and trails the feature baselines still counts: that is the negative control working.
 
 **Fall back to (a)** only if the 4b prototype is too slow to rerun (more than ~10 minutes for the full grouped CV) or too unstable to report (fold-to-fold spread larger than the gaps it is meant to show). In that case the 4b slot becomes the fresh-clone run of the whole pipeline, as `SPLIT.md` says.
+
+## Prototype result (4b)
+
+`python scripts/run_dtw.py` (seed 0, grouped folds; 74 s on one core). To keep it laptop-friendly the references are every 12th window of each training recording (~450) and the queries every 4th window of each held-out recording (1,584 in total); windows overlap by 50%, so neighbours are near-duplicates.
+
+| Distance | macro-F1, k=1 | macro-F1, k=5 | B1 recall | R recall |
+|---|---|---|---|---|
+| DTW, band ±8 | 0.28 ± 0.07 | 0.29 ± 0.09 | 0.54 | 0.61 |
+| No warping, band 0 | 0.26 ± 0.09 | 0.28 ± 0.13 | 0.55 | 0.54 |
+| 126 hand features | 0.30 ± 0.12 | 0.30 ± 0.12 | 0.97 | 0.23 |
+
+(Recalls are for k=1. Chance macro-F1 is 0.17.)
+
+- **Warping adds nothing measurable:** +0.01 to +0.03 over band 0, well inside the fold-to-fold spread. This is the negative control we expected.
+- **The envelope is complementary, not useless:** it finds R far better than the features do (0.61 vs 0.23 recall) and B1 far worse (0.54 vs 0.97). What helps is the envelope's shape over 10 s, not elastic alignment.
+- **Recommendation stands:** report (b) as a one-row baseline with the band-0 control, and say plainly that alignment itself does not help. It was cheap to run, so the fallback to (a) is not needed.

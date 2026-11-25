@@ -27,7 +27,7 @@ Use the cached features (`data/processed/features_clean.parquet`, made by `run_b
 - [ ] **4b.** If (b) is cheap, prototype it. Final call made together. If we choose (a), this slot becomes a fresh-clone run of the full pipeline, fixing whatever breaks.
 - [x] **5a.** Kernel PCA (RBF) as a non-linear front-end, with its tests. Merge before 1c so the multi-seed rerun includes it.
 - [ ] **5b.** Nested hyperparameter tuning (currently fixed: k=5, C=10, 300 trees).
-- [ ] **T1.** Tests for `analysis.py`.
+- [x] **T1.** Tests for `analysis.py`.
 - [ ] **F1.** Final analysis figures and tables for the report.
 - [ ] **R2.** Report: separability analysis section.
 - [ ] **R3.** Report: DTW section.

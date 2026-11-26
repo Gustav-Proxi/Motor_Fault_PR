@@ -16,7 +16,7 @@ The two tracks touch different files, so both can run at the same time without m
 - [x] **R1.** Report: methods, validation and robustness sections.
 - [x] **P1.** Fresh-clone reproducibility run of the full pipeline from the README; fix whatever breaks.
 - [x] **R6.** Report: `main.tex` assembling all sections, abstract and conclusion.
-- [ ] **S1.** Presentation slides (shared deck).
+- [x] **S1.** Accuracy-vs-hyperparameter figure for the report (a rubric figure type). The presentation slides moved to Sanika (2026-11-25).
 
 ## Sanika — analysis, DTW and extensions (items 2, 4, 5)
 

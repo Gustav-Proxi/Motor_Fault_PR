@@ -37,12 +37,12 @@ python scripts/aggregate_seeds.py                # mean ± std over seeds -> res
 python scripts/run_analysis.py                   # -> results/analysis/
 python scripts/run_dtw.py                        # -> results/dtw/
 python scripts/run_tuning.py                     # -> results/tuning/
+python scripts/run_hyper.py                      # macro-F1 vs k, SVM C, neighbours (5 seeds) -> results/hyper/, fig_hyper.pdf
 
 # 4. report tables and figures, then the PDF
 python scripts/make_report_figures.py            # separability, DTW, Kernel PCA, projection + confusion figures; tables
 python scripts/make_methods_tables.py            # model grid, splits, OOD, SA tables; corruption figure
 (cd report && latexmk -pdf main.tex)             # report/main.pdf
-(cd slides && latexmk -pdf slides.tex)          # slides/slides.pdf (Beamer; uses report/ figures)
 
 python scripts/export_ui_data.py                 # data bundle for the interactive UI -> ui/public/data/
 python -m pytest                                 # tests

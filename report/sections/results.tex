@@ -90,26 +90,28 @@ to 0.42--0.60, mostly through z-scoring each domain with its own statistics; Sub
 adds little and in either direction ($-0.07$ to $+0.09$ against z-scoring). The shift is mostly
 a change of location and scale per feature.
 
-\subsection{Kernel PCA, tuning and DTW}
+\subsection{Hyperparameters, Kernel PCA, tuning and DTW}
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\columnwidth]{figures/fig_fisher_k.pdf}
-  \caption{Held-out Fisher $J$ against $k$ (5 seeds, mean $\pm$ std).}
-  \label{fig:kpca}
+  \includegraphics[width=\columnwidth]{figures/fig_hyper.pdf}
+  \caption{Macro-F1 against one hyperparameter at a time, the rest at their defaults (grouped
+  CV, 5 seeds, $\pm$1 std; dotted: chance). Left: projected dimensions, linear SVM. Middle: SVM
+  $C$, raw features. Right: $k$-NN neighbours.}
+  \label{fig:hyper}
 \end{figure}
 
-The non-linear projection does not help. Kernel PCA keeps as much held-out separability as PCA
-at every $k$ ($10.4 \pm 1.5$ against $10.1 \pm 3.5$ at $k=5$; Fig.~\ref{fig:kpca}), yet its best
-classifier reaches only $0.28 \pm 0.05$. With $\gamma = 1/126$, two standardised windows sit
-about 16 apart, where the kernel is already down to 0.13, so the embedding emphasises local
-neighbourhoods of the training recordings. Consistent with that, nested tuning most often picks
-the wider $\gamma = 0.002$, which brings Kernel PCA closer to linear PCA. Tuning in general changes
-little (seed 0, every second training window): on the raw and LDA-5 front-ends the gain over
-the defaults lies between $-0.03$ and $+0.04$, inside the fold-to-fold spread of 0.10--0.17, and
-for most models the selected setting changes from fold to fold. The largest gain, Kernel PCA-5
-with an RBF SVM (0.22 to 0.35),
-still leaves it below the linear front-ends. Elastic alignment brings nothing either: DTW on the
+Of the hyperparameters, only the projected dimension matters (Fig.~\ref{fig:hyper}). PCA
+rises from 0.14 at $k=1$ to 0.42 at $k \ge 12$ and Kernel PCA to 0.37 at $k=10$, so five
+dimensions are too few for both; LDA peaks at $k=3$ (0.46). The linear SVM is flat for $C \ge 0.01$, and the
+neighbour count barely moves $k$-NN. Kernel PCA keeps as much held-out separability as PCA at
+$k=5$ ($J = 10.4 \pm 1.5$ against $10.1 \pm 3.5$), yet its best classifier reaches only
+$0.28 \pm 0.05$. With $\gamma = 1/126$ the kernel is already
+down to 0.13 at the typical distance between two windows, so the embedding stays local; nested
+tuning most often picks the wider $\gamma = 0.002$. Nested tuning in general (seed 0) changes
+the raw and LDA-5 results by $-0.03$ to $+0.04$, inside the fold-to-fold spread, and its
+largest gain, Kernel PCA-5 with an RBF SVM (0.22 to 0.35), still leaves it below the linear
+front-ends. Elastic alignment brings nothing either: DTW on the
 window envelopes scores $0.28 \pm 0.07$ against $0.26 \pm 0.09$ without warping and
 $0.30 \pm 0.12$ for the features (seed 0): windows of a steady run start at arbitrary shaft
 phases, so there is nothing to align. The envelope beats the features on R (recall 0.61 against 0.23)

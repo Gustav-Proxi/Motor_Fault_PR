@@ -412,33 +412,20 @@ aside.notes { display: none; }
   <aside class="notes">Testing at 40 Hz after training on 30 and 50 Hz is interpolation, and it beats grouped CV at 0.66. A new load is the hard shift: both PCA front-ends collapse to about 0.14. Normalising each condition separately recovers most of it; Subspace Alignment adds little.</aside>
 </section>
 
-<!-- 10 · KPCA / tuning / DTW -->
+<!-- 10 · Hyperparameters, KPCA / tuning / DTW -->
 <section class="slide">
-  <div class="eyebrow">09 · Result 6: what did not help</div>
-  <h2>Kernel PCA, tuning and DTW do not move the needle</h2>
-  <div class="body" style="grid-template-columns: 1fr 1fr 1fr; gap: 24px;">
-    <div class="card" style="display: flex; flex-direction: column; gap: 12px;">
-      <div class="k">Kernel PCA</div>
-      <div class="big" style="font-size: 72px;">0.28</div>
-      <p style="font-size: 21px;">best classifier (± 0.05), although it keeps PCA-level held-out separability (J 10.4 vs 10.1). With γ = 1/126 two
-        windows sit ~16 apart, where the kernel is already 0.13: the embedding is local.</p>
-      <div class="fig" style="padding: 6px;"><img src="%%FISHER%%" alt="Held-out Fisher J against projected dimensions for PCA, LDA and Kernel PCA"></div>
-    </div>
-    <div class="card" style="display: flex; flex-direction: column; gap: 12px;">
-      <div class="k">Nested grouped tuning</div>
-      <div class="big" style="font-size: 72px;">±0.04</div>
-      <p style="font-size: 21px;">Gain over the defaults on raw and LDA-5 lies between −0.03 and +0.04, inside the fold-to-fold spread of 0.10–0.17,
-        and the chosen setting changes from fold to fold. Largest gain: Kernel PCA + RBF SVM, 0.22 → 0.35, still below the linear front-ends.</p>
-    </div>
-    <div class="card" style="display: flex; flex-direction: column; gap: 12px;">
-      <div class="k">Dynamic time warping</div>
-      <div class="big" style="font-size: 72px;">0.28</div>
-      <p style="font-size: 21px;">DTW k-NN on window envelopes vs <b>0.26</b> without warping and <b>0.30</b> for the features. Windows of a
-        steady run start at arbitrary shaft phases, so there is nothing to align. The envelope does see R better (recall 0.61 vs 0.23).</p>
+  <div class="eyebrow">09 · Result 6: accuracy vs hyperparameters</div>
+  <h2>Only the projected dimension matters</h2>
+  <div class="body cols-64" style="gap: 32px;">
+    <div class="fig"><img src="%%HYPER%%" alt="Macro-F1 against projected dimensions for PCA, LDA and Kernel PCA, against SVM C, and against the number of k-NN neighbours"></div>
+    <div style="display: flex; flex-direction: column; gap: 16px; justify-content: center;">
+      <div class="card"><h3>Projected dimension</h3><p>PCA rises from <b>0.14</b> at k = 1 to <b>0.42</b> at k ≥ 12; Kernel PCA reaches <b>0.37</b> at k = 10, so five dimensions are too few for both. LDA peaks at k = 3 (<b>0.46</b>).</p></div>
+      <div class="card"><h3>Classifier settings</h3><p>The linear SVM is flat for C ≥ 0.01 and the neighbour count barely moves k-NN. Nested tuning: −0.03 to +0.04.</p></div>
+      <div class="card"><h3>Kernel PCA and DTW</h3><p>Kernel PCA keeps PCA-level held-out J (10.4 vs 10.1) yet classifies at 0.28. DTW scores 0.28 vs 0.26 without warping: a steady run has nothing to align.</p></div>
     </div>
   </div>
-  <div class="foot"><span>Motor faults at 100 Hz · tuning and DTW: seed 0</span><span class="pg"></span></div>
-  <aside class="notes">We tried the obvious upgrades. The non-linear projection keeps separability but classifies worse. Proper nested tuning changes little. Elastic alignment brings nothing on steady-state recordings. The limit is recording-to-recording variation, not model capacity.</aside>
+  <div class="foot"><span>Motor faults at 100 Hz · sweep: 5 seeds · tuning and DTW: seed 0</span><span class="pg"></span></div>
+  <aside class="notes">Each panel changes one hyperparameter and keeps the rest at the defaults, scored on held-out recordings over five seeds. Only the number of projected dimensions matters: PCA and Kernel PCA need more than five. The classifier settings and nested tuning barely move the result, and DTW adds nothing on steady runs. The limit is recording-to-recording variation, not model capacity.</aside>
 </section>
 
 <!-- 11 · Conclusions -->

@@ -40,7 +40,7 @@ Edit `tools/deck_template.html`. Then render the three report figures and inline
 
 ```bash
 mkdir -p /tmp/deckfigs
-for f in fig_projection fig_corruption fig_fisher_k; do
+for f in fig_projection fig_corruption fig_hyper; do
   pdftoppm -r 220 -png -singlefile report/figures/$f.pdf /tmp/deckfigs/$f
 done
 python presentation/tools/build_deck.py /tmp/deckfigs presentation/Motor_Fault_Slides.html
